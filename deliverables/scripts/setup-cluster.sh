@@ -116,11 +116,29 @@ echo ""
 echo "=========================================="
 echo "Step 3: Installing Monitoring Stack"
 echo "=========================================="
-echo "Following instructions from charts/monitoring/README.md"
-echo "Command: helm upgrade --install observability charts/monitoring -f charts/monitoring/values.yaml -n $MONITORING_NAMESPACE"
-cd "$PROJECT_ROOT"
-helm upgrade --install observability charts/monitoring -f charts/monitoring/values.yaml -n $MONITORING_NAMESPACE --create-namespace
-echo "✓ Monitoring stack installation initiated"
+if helm list -n $MONITORING_NAMESPACE | grep -q "observability"; then
+    echo "✓ Monitoring stack 'observability' is already installed"
+    echo "  Current status:"
+    helm list -n $MONITORING_NAMESPACE | grep observability
+    echo ""
+    read -p "Do you want to upgrade/reinstall? (y/n) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo "Following instructions from charts/monitoring/README.md"
+        echo "Command: helm upgrade --install observability charts/monitoring -f charts/monitoring/values.yaml -n $MONITORING_NAMESPACE"
+        cd "$PROJECT_ROOT"
+        helm upgrade --install observability charts/monitoring -f charts/monitoring/values.yaml -n $MONITORING_NAMESPACE --create-namespace
+        echo "✓ Monitoring stack upgrade initiated"
+    else
+        echo "⏭ Keeping existing monitoring stack installation"
+    fi
+else
+    echo "Following instructions from charts/monitoring/README.md"
+    echo "Command: helm upgrade --install observability charts/monitoring -f charts/monitoring/values.yaml -n $MONITORING_NAMESPACE"
+    cd "$PROJECT_ROOT"
+    helm upgrade --install observability charts/monitoring -f charts/monitoring/values.yaml -n $MONITORING_NAMESPACE --create-namespace
+    echo "✓ Monitoring stack installation initiated"
+fi
 echo "  Note: Wait for pods to be ready before proceeding"
 echo ""
 
@@ -128,16 +146,34 @@ echo ""
 echo "=========================================="
 echo "Step 4: Installing Vault (Optional)"
 echo "=========================================="
-read -p "Do you want to install Vault? (y/n) " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    echo "Following instructions from charts/vault/README.md"
-    echo "Command: helm upgrade --install vault-setup charts/vault -n $VAULT_NAMESPACE"
-    helm upgrade --install vault-setup charts/vault -n $VAULT_NAMESPACE --create-namespace
-    echo "✓ Vault installation initiated"
-    echo "  Note: Follow vault/README.md for initialization steps"
+if helm list -n $VAULT_NAMESPACE | grep -q "vault-setup"; then
+    echo "✓ Vault 'vault-setup' is already installed"
+    echo "  Current status:"
+    helm list -n $VAULT_NAMESPACE | grep vault-setup
+    echo ""
+    read -p "Do you want to upgrade/reinstall? (y/n) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo "Following instructions from charts/vault/README.md"
+        echo "Command: helm upgrade --install vault-setup charts/vault -n $VAULT_NAMESPACE"
+        helm upgrade --install vault-setup charts/vault -n $VAULT_NAMESPACE --create-namespace
+        echo "✓ Vault upgrade initiated"
+        echo "  Note: Follow vault/README.md for initialization steps"
+    else
+        echo "⏭ Keeping existing Vault installation"
+    fi
 else
-    echo "⏭ Skipping Vault installation"
+    read -p "Do you want to install Vault? (y/n) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo "Following instructions from charts/vault/README.md"
+        echo "Command: helm upgrade --install vault-setup charts/vault -n $VAULT_NAMESPACE"
+        helm upgrade --install vault-setup charts/vault -n $VAULT_NAMESPACE --create-namespace
+        echo "✓ Vault installation initiated"
+        echo "  Note: Follow vault/README.md for initialization steps"
+    else
+        echo "⏭ Skipping Vault installation"
+    fi
 fi
 echo ""
 
@@ -145,15 +181,32 @@ echo ""
 echo "=========================================="
 echo "Step 5: Installing External Secrets Operator (Optional)"
 echo "=========================================="
-read -p "Do you want to install External Secrets Operator? (y/n) " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    echo "Following instructions from charts/external-secrets/README.md"
-    echo "Command: helm upgrade --install external-secrets charts/external-secrets -n $VAULT_NAMESPACE"
-    helm upgrade --install external-secrets charts/external-secrets -n $VAULT_NAMESPACE --create-namespace
-    echo "✓ External Secrets Operator installation initiated"
+if helm list -n $VAULT_NAMESPACE | grep -q "external-secrets"; then
+    echo "✓ External Secrets Operator 'external-secrets' is already installed"
+    echo "  Current status:"
+    helm list -n $VAULT_NAMESPACE | grep external-secrets
+    echo ""
+    read -p "Do you want to upgrade/reinstall? (y/n) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo "Following instructions from charts/external-secrets/README.md"
+        echo "Command: helm upgrade --install external-secrets charts/external-secrets -n $VAULT_NAMESPACE"
+        helm upgrade --install external-secrets charts/external-secrets -n $VAULT_NAMESPACE --create-namespace
+        echo "✓ External Secrets Operator upgrade initiated"
+    else
+        echo "⏭ Keeping existing External Secrets Operator installation"
+    fi
 else
-    echo "⏭ Skipping External Secrets Operator installation"
+    read -p "Do you want to install External Secrets Operator? (y/n) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo "Following instructions from charts/external-secrets/README.md"
+        echo "Command: helm upgrade --install external-secrets charts/external-secrets -n $VAULT_NAMESPACE"
+        helm upgrade --install external-secrets charts/external-secrets -n $VAULT_NAMESPACE --create-namespace
+        echo "✓ External Secrets Operator installation initiated"
+    else
+        echo "⏭ Skipping External Secrets Operator installation"
+    fi
 fi
 echo ""
 
