@@ -115,23 +115,56 @@ echo "Step 6: Deploying Student API"
 echo "=========================================="
 echo "Following instructions from charts/crud-api/README.md"
 echo ""
-echo "⚠ IMPORTANT: Before deploying, ensure:"
-echo "  1. Vault is installed and initialized (if using external secrets)"
-echo "  2. Vault token secret is created:"
-echo "     kubectl create secret generic vault-token-secret \\"
-echo "       --from-literal=vault-token=<your-vault-token> \\"
-echo "       -n $NAMESPACE"
-echo ""
-read -p "Ready to deploy Student API? (y/n) " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    echo "Command: helm upgrade --install student-crud-api charts/crud-api -n $NAMESPACE --create-namespace"
-    helm upgrade --install student-crud-api charts/crud-api -n $NAMESPACE --create-namespace
-    echo "✓ Student API deployment initiated"
+
+# Check if Vault is installed
+VAULT_INSTALLED=false
+if kubectl get pods -n $VAULT_NAMESPACE -l app.kubernetes.io/name=vault 2>/dev/null | grep -q Running; then
+    VAULT_INSTALLED=true
+fi
+
+if [ "$VAULT_INSTALLED" = true ]; then
+    echo "✓ Vault is installed"
+    echo ""
+    echo "⚠ IMPORTANT: Before deploying with External Secrets, ensure:"
+    echo "  1. Vault is initialized and unsealed"
+    echo "  2. Vault token secret is created:"
+    echo "     kubectl create secret generic vault-token-secret \\"
+    echo "       --from-literal=vault-token=<your-vault-token> \\"
+    echo "       -n $NAMESPACE"
+    echo "  3. Secrets are stored in Vault at path: kv/postgres-secret"
+    echo ""
+    read -p "Deploy with External Secrets enabled? (y/n) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo "Command: helm upgrade --install student-crud-api charts/crud-api -n $NAMESPACE --create-namespace"
+        helm upgrade --install student-crud-api charts/crud-api -n $NAMESPACE --create-namespace
+        echo "✓ Student API deployment initiated (with External Secrets)"
+    else
+        echo "Deploying without External Secrets (using Kubernetes secrets)..."
+        echo "Command: helm upgrade --install student-crud-api charts/crud-api -n $NAMESPACE --create-namespace --set externalSecret.enabled=false"
+        helm upgrade --install student-crud-api charts/crud-api -n $NAMESPACE --create-namespace --set externalSecret.enabled=false
+        echo "✓ Student API deployment initiated (without External Secrets)"
+        echo "  Note: Ensure Kubernetes secrets are created manually if needed"
+    fi
 else
-    echo "⏭ Skipping Student API deployment"
-    echo "  You can deploy later using:"
-    echo "  helm upgrade --install student-crud-api charts/crud-api -n $NAMESPACE"
+    echo "⚠ Vault is not installed"
+    echo ""
+    echo "You can still deploy Student API without External Secrets:"
+    echo "  - Set externalSecret.enabled=false"
+    echo "  - The chart will use regular Kubernetes secrets"
+    echo ""
+    read -p "Deploy Student API without External Secrets? (y/n) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo "Command: helm upgrade --install student-crud-api charts/crud-api -n $NAMESPACE --create-namespace --set externalSecret.enabled=false"
+        helm upgrade --install student-crud-api charts/crud-api -n $NAMESPACE --create-namespace --set externalSecret.enabled=false
+        echo "✓ Student API deployment initiated (without External Secrets)"
+        echo "  Note: Ensure Kubernetes secrets are created manually if needed"
+    else
+        echo "⏭ Skipping Student API deployment"
+        echo "  You can deploy later using:"
+        echo "  helm upgrade --install student-crud-api charts/crud-api -n $NAMESPACE --set externalSecret.enabled=false"
+    fi
 fi
 echo ""
 
