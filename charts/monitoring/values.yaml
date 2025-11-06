@@ -29,20 +29,20 @@ loki-stack:
       enabled: true
       storageClassName: standard
       accessModes:
-        - ReadWriteOnce
+      - ReadWriteOnce
       size: 10Gi
       annotations: {}
     # Configuration for Loki storage
     config:
       schema_config:
         configs:
-          - from: "2020-10-24"
-            store: boltdb-shipper
-            object_store: filesystem
-            schema: v11
-            index:
-              prefix: index_
-              period: 24h
+        - from: "2020-10-24"
+          store: boltdb-shipper
+          object_store: filesystem
+          schema: v11
+          index:
+            prefix: index_
+            period: 24h
       storage_config:
         boltdb_shipper:
           active_index_directory: /loki/boltdb-shipper-active
@@ -88,19 +88,19 @@ loki-stack:
         #   action: keep
         #   regex: student-api
         # Add namespace label
-        - source_labels: [__meta_kubernetes_namespace]
+        - source_labels: [ __meta_kubernetes_namespace ]
           target_label: namespace
         # Add pod name label
-        - source_labels: [__meta_kubernetes_pod_name]
+        - source_labels: [ __meta_kubernetes_pod_name ]
           target_label: pod
         # Add container name label
-        - source_labels: [__meta_kubernetes_pod_container_name]
+        - source_labels: [ __meta_kubernetes_pod_container_name ]
           target_label: container
         # Add node name label
-        - source_labels: [__meta_kubernetes_pod_node_name]
+        - source_labels: [ __meta_kubernetes_pod_node_name ]
           target_label: node
         # Add app label if available
-        - source_labels: [__meta_kubernetes_pod_label_app]
+        - source_labels: [ __meta_kubernetes_pod_label_app ]
           target_label: app
         # Set the log path
         - action: replace
@@ -126,13 +126,13 @@ kube-prometheus-stack:
 
   grafana:
     enabled: true
-    nodeSelector: 
+    nodeSelector:
       type: dependent_services
     tolerations:
-      - key: "type"
-        operator: "Equal"
-        value: "dependent_services" 
-        effect: "NoSchedule"
+    - key: "type"
+      operator: "Equal"
+      value: "dependent_services"
+      effect: "NoSchedule"
     # Let kube-prometheus-stack manage Prometheus datasource (default)
     # Loki datasource will be added manually or via loki-stack (non-default)
     defaultDashboardsEnabled: true
