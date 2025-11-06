@@ -33,20 +33,68 @@ echo ""
 echo "=========================================="
 echo "Step 1: Setting up Minikube cluster"
 echo "=========================================="
-echo "Using existing minikube.sh script..."
+
+# Determine profile name
 if [ -f "$PROJECT_ROOT/minikube.sh" ]; then
-    bash "$PROJECT_ROOT/minikube.sh"
+    # Extract profile name from minikube.sh
+    PROFILE_NAME=$(grep -oP 'PROFILE_NAME="\K[^"]+' "$PROJECT_ROOT/minikube.sh" || echo "one2n-task")
 else
-    echo "⚠ Warning: minikube.sh not found. Setting up cluster manually..."
-    PROFILE_NAME="one2n-task"
-    minikube start --nodes 4 -p $PROFILE_NAME --memory 2048 --cpus 4
-    kubectl wait --for=condition=ready node --all --timeout=300s
-    kubectl label nodes $PROFILE_NAME $PROFILE_NAME-m02 type=application --overwrite
-    kubectl label nodes $PROFILE_NAME $PROFILE_NAME-m03 type=database --overwrite
-    kubectl label nodes $PROFILE_NAME $PROFILE_NAME-m04 type=dependent_services --overwrite
-    kubectl taint nodes $PROFILE_NAME-m02 type=application:NoSchedule --overwrite
-    kubectl taint nodes $PROFILE_NAME-m03 type=database:NoSchedule --overwrite
-    kubectl taint nodes $PROFILE_NAME-m04 type=dependent_services:NoSchedule --overwrite
+    PROFILE_NAME="atlan-sre-task"
+fi
+
+# Check if cluster is already running
+if minikube status -p $PROFILE_NAME &>/dev/null; then
+    echo "✓ Cluster '$PROFILE_NAME' is already running"
+    echo "  Current status:"
+    minikube status -p $PROFILE_NAME
+    echo ""
+    read -p "Do you want to recreate the cluster? (y/n) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo "Stopping existing cluster..."
+        minikube stop -p $PROFILE_NAME || true
+        minikube delete -p $PROFILE_NAME || true
+        echo "Recreating cluster..."
+    else
+        echo "Using existing cluster. Verifying node labels and taints..."
+        # Verify and apply labels/taints if needed
+        NODES=$(kubectl get nodes -o name)
+        for node in $NODES; do
+            NODE_NAME=${node#node/}
+            if [[ "$NODE_NAME" == *"-m02" ]]; then
+                kubectl label nodes $NODE_NAME type=application --overwrite 2>/dev/null || true
+                kubectl taint nodes $NODE_NAME type=application:NoSchedule --overwrite 2>/dev/null || true
+            elif [[ "$NODE_NAME" == *"-m03" ]]; then
+                kubectl label nodes $NODE_NAME type=database --overwrite 2>/dev/null || true
+                kubectl taint nodes $NODE_NAME type=database:NoSchedule --overwrite 2>/dev/null || true
+            elif [[ "$NODE_NAME" == *"-m04" ]]; then
+                kubectl label nodes $NODE_NAME type=dependent_services --overwrite 2>/dev/null || true
+                kubectl taint nodes $NODE_NAME type=dependent_services:NoSchedule --overwrite 2>/dev/null || true
+            fi
+        done
+        echo "✓ Cluster is ready"
+        echo ""
+        # Skip to next step
+        SKIP_CLUSTER_SETUP=true
+    fi
+fi
+
+# Setup cluster if not skipping
+if [ "${SKIP_CLUSTER_SETUP:-false}" != "true" ]; then
+    echo "Setting up Minikube cluster..."
+    if [ -f "$PROJECT_ROOT/minikube.sh" ]; then
+        bash "$PROJECT_ROOT/minikube.sh"
+    else
+        echo "⚠ Warning: minikube.sh not found. Setting up cluster manually..."
+        minikube start --nodes 4 -p $PROFILE_NAME --memory 2048 --cpus 4
+        kubectl wait --for=condition=ready node --all --timeout=300s
+        kubectl label nodes $PROFILE_NAME $PROFILE_NAME-m02 type=application --overwrite
+        kubectl label nodes $PROFILE_NAME $PROFILE_NAME-m03 type=database --overwrite
+        kubectl label nodes $PROFILE_NAME $PROFILE_NAME-m04 type=dependent_services --overwrite
+        kubectl taint nodes $PROFILE_NAME-m02 type=application:NoSchedule --overwrite
+        kubectl taint nodes $PROFILE_NAME-m03 type=database:NoSchedule --overwrite
+        kubectl taint nodes $PROFILE_NAME-m04 type=dependent_services:NoSchedule --overwrite
+    fi
 fi
 echo ""
 
@@ -159,7 +207,6 @@ else
         echo "Command: helm upgrade --install student-crud-api charts/crud-api -n $NAMESPACE --create-namespace --set externalSecret.enabled=false"
         helm upgrade --install student-crud-api charts/crud-api -n $NAMESPACE --create-namespace --set externalSecret.enabled=false
         echo "✓ Student API deployment initiated (without External Secrets)"
-        echo "  Note: Ensure Kubernetes secrets are created manually if needed"
     else
         echo "⏭ Skipping Student API deployment"
         echo "  You can deploy later using:"
