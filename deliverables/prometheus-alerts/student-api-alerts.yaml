@@ -1,7 +1,17 @@
-groups:
-- name: student-api-alerts
-  interval: 30s
-  rules:
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: student-api-alerts
+  namespace: monitoring
+  labels:
+    app: student-api
+    prometheus: kube-prometheus-stack
+    release: observability
+spec:
+  groups:
+  - name: student-api-alerts
+    interval: 30s
+    rules:
   # HTTP Error Rate Alert
   - alert: HighHTTPErrorRate
     expr: rate(http_errors_total{application="student-api"}[5m]) > 0.1

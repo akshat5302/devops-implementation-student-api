@@ -322,10 +322,10 @@ echo "=========================================="
 echo "Step 7: Applying Prometheus Alert Rules"
 echo "=========================================="
 if [ -f "$SCRIPT_DIR/../prometheus-alerts/student-api-alerts.yaml" ]; then
-    echo "Applying Prometheus alert rules..."
-    kubectl apply -f "$SCRIPT_DIR/../prometheus-alerts/student-api-alerts.yaml" -n $MONITORING_NAMESPACE || {
-        echo "⚠ Note: Alert rules may need to be applied as PrometheusRule CRD"
-        echo "  Check charts/monitoring/README.md for alert configuration"
+    echo "Applying Prometheus alert rules (PrometheusRule CRD)..."
+    kubectl apply -f "$SCRIPT_DIR/../prometheus-alerts/student-api-alerts.yaml" || {
+        echo "⚠ Error applying alert rules. Make sure Prometheus Operator is installed."
+        echo "  Alert rules require PrometheusRule CRD from Prometheus Operator"
     }
     echo "✓ Alert rules applied"
 else
