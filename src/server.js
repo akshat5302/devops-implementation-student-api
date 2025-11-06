@@ -11,15 +11,24 @@ const app = express();
 dbMetrics.setupSequelizeHooks(sequelize);
 app.use(metricsController.trackMetrics());
 
+// CORS middleware - must be before body parser
+app.use((req, res, next) => {
+  // Set CORS headers for all requests
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  
+  next();
+});
 
 app.use(bodyparser.json());
 app.use(bodyparser.urlencoded({ extended: false }));
-
-app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
-  next();
-});
 
 app.get('/', (req, res, next) => {
   res.send('Hello World using Gitops and ArgoCD with Argo Workflows');

@@ -9,10 +9,22 @@ metadata:
 spec:
   ingressClassName: {{ .Values.ingress.ingressClass }}
   rules:
+    {{- if and .Values.ingress.appHost .Values.frontend.enabled }}
     - host: {{ .Values.ingress.appHost }}
       http:
         paths:
-          {{- if .Values.api.enabled }}
+          - backend:
+              service:
+                port:
+                  number: 8080
+                name: {{ .Release.Name }}-frontend
+            path: /
+            pathType: Prefix
+    {{- end }}
+    {{- if and .Values.ingress.api .Values.api.enabled }}
+    - host: {{ .Values.ingress.api }}
+      http:
+        paths:
           - backend:
               service:
                 port:
@@ -20,5 +32,5 @@ spec:
                 name: {{ .Release.Name }}-api
             path: /
             pathType: Prefix
-          {{- end}}
+    {{- end }}
 {{- end }}

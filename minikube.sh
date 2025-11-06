@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Set the profile name
-PROFILE_NAME="one2n-task"
+PROFILE_NAME="atlan-sre-task"
 
 # Start Minikube with 4 nodes, each with 2GB RAM, using the specified profile
 minikube start --nodes 4 -p $PROFILE_NAME --memory 2048 --cpus 4
