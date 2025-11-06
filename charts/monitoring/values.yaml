@@ -21,9 +21,8 @@ loki-stack:
         port: http-metrics
       initialDelaySeconds: 45
     datasource:
-      jsonData: "{}"  
-      uid: ""
-      isDefault: false  # Don't mark Loki as default, Prometheus should be default
+      enabled: false  # Disable loki-stack datasource provisioning, we'll configure it in kube-prometheus-stack
+      isDefault: false  # Ensure Loki is not default if provisioning is enabled
   grafana:
     enabled: false
 
