@@ -317,9 +317,23 @@ else
     fi
 fi
 
-# Step 7: Apply Prometheus Alerts
+# Step 7: Fix Grafana Datasource Conflict
 echo "=========================================="
-echo "Step 7: Applying Prometheus Alert Rules"
+echo "Step 7: Fixing Grafana Datasource Configuration"
+echo "=========================================="
+echo "Ensuring only Prometheus is marked as default datasource..."
+# Remove grafana_datasource label from loki-stack ConfigMap to prevent conflict
+if kubectl get configmap ${RELEASE_NAME:-observability}-loki-stack -n $MONITORING_NAMESPACE &>/dev/null; then
+    kubectl label configmap ${RELEASE_NAME:-observability}-loki-stack -n $MONITORING_NAMESPACE "grafana_datasource-" --overwrite 2>/dev/null || true
+    echo "✓ Removed grafana_datasource label from loki-stack ConfigMap"
+else
+    echo "⏭ loki-stack ConfigMap not found, skipping"
+fi
+echo ""
+
+# Step 8: Apply Prometheus Alerts
+echo "=========================================="
+echo "Step 8: Applying Prometheus Alert Rules"
 echo "=========================================="
 if [ -f "$SCRIPT_DIR/../prometheus-alerts/student-api-alerts.yaml" ]; then
     echo "Applying Prometheus alert rules (PrometheusRule CRD)..."
