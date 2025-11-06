@@ -75,7 +75,41 @@ loki-stack:
       logLevel: info
       serverPort: 3101
       clients:
-      - url: http://<loki-service-name>:3100/loki/api/v1/push
+      - url: http://observability-loki:3100/loki/api/v1/push
+      # Kubernetes scraping configuration to collect logs from all pods
+      scrape_configs:
+      - job_name: kubernetes-pods
+        kubernetes_sd_configs:
+        - role: pod
+        relabel_configs:
+        # Keep logs from all namespaces (remove this section to collect from all)
+        # To collect only from student-api namespace, uncomment the following:
+        # - source_labels: [__meta_kubernetes_namespace]
+        #   action: keep
+        #   regex: student-api
+        # Add namespace label
+        - source_labels: [__meta_kubernetes_namespace]
+          target_label: namespace
+        # Add pod name label
+        - source_labels: [__meta_kubernetes_pod_name]
+          target_label: pod
+        # Add container name label
+        - source_labels: [__meta_kubernetes_pod_container_name]
+          target_label: container
+        # Add node name label
+        - source_labels: [__meta_kubernetes_pod_node_name]
+          target_label: node
+        # Add app label if available
+        - source_labels: [__meta_kubernetes_pod_label_app]
+          target_label: app
+        # Set the log path
+        - action: replace
+          replacement: /var/log/pods/*$1/*.log
+          separator: /
+          source_labels:
+          - __meta_kubernetes_pod_uid
+          - __meta_kubernetes_pod_container_name
+          target_label: __path__
 
 kube-prometheus-stack:
   enabled: true
