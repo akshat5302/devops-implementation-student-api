@@ -1,14 +1,14 @@
 loki-stack:
   loki:
     enabled: true
-    nodeSelector: 
+    nodeSelector:
       type: dependent_services
     tolerations:
-      - key: "type"
-        operator: "Equal"
-        value: "dependent_services" 
-        effect: "NoSchedule"
-    image: 
+    - key: "type"
+      operator: "Equal"
+      value: "dependent_services"
+      effect: "NoSchedule"
+    image:
       tag: 2.9.3
     readinessProbe:
       httpGet:
@@ -20,45 +20,46 @@ loki-stack:
         path: /ready
         port: http-metrics
       initialDelaySeconds: 45
+    # Completely disable loki-stack datasource provisioning
+    # The datasource ConfigMap will be manually patched after deployment
     datasource:
-      enabled: false  # Disable loki-stack datasource provisioning, we'll configure it in kube-prometheus-stack
-      isDefault: false  # Ensure Loki is not default if provisioning is enabled
+      enabled: false
   grafana:
     enabled: false
 
   promtail:
-    enabled: true 
+    enabled: true
     tolerations:
-      - key: "type"
-        operator: "Equal"
-        value: "dependent_services" 
-        effect: "NoSchedule"
-      - key: "type"
-        operator: "Equal"
-        value: "application"
-        effect: "NoSchedule"
-      - key: "type"
-        operator: "Equal"
-        value: "database"
-        effect: "NoSchedule"
+    - key: "type"
+      operator: "Equal"
+      value: "dependent_services"
+      effect: "NoSchedule"
+    - key: "type"
+      operator: "Equal"
+      value: "application"
+      effect: "NoSchedule"
+    - key: "type"
+      operator: "Equal"
+      value: "database"
+      effect: "NoSchedule"
     config:
       logLevel: info
       serverPort: 3101
       clients:
-        - url: http://<loki-service-name>:3100/loki/api/v1/push
+      - url: http://<loki-service-name>:3100/loki/api/v1/push
 
 kube-prometheus-stack:
   enabled: true
   alertmanager:
     enabled: true
     alertmanagerSpec:
-      nodeSelector: 
+      nodeSelector:
         type: dependent_services
       tolerations:
-        - key: "type"
-          operator: "Equal"
-          value: "dependent_services" 
-          effect: "NoSchedule"
+      - key: "type"
+        operator: "Equal"
+        value: "dependent_services"
+        effect: "NoSchedule"
 
   grafana:
     enabled: true
@@ -69,78 +70,63 @@ kube-prometheus-stack:
         operator: "Equal"
         value: "dependent_services" 
         effect: "NoSchedule"
-    # Configure datasources to avoid conflicts
+    # Let kube-prometheus-stack manage Prometheus datasource (default)
+    # Loki datasource will be added manually or via loki-stack (non-default)
     defaultDashboardsEnabled: true
-    datasources:
-      datasources.yaml:
-        apiVersion: 1
-        datasources:
-        - name: Prometheus
-          type: prometheus
-          access: proxy
-          url: http://observability-kube-prometheus-stack-prometheus:9090
-          isDefault: true
-          editable: true
-        - name: Loki
-          type: loki
-          access: proxy
-          url: http://observability-loki:3100
-          isDefault: false
-          editable: true
 
   prometheusOperator:
     enabled: true
-    nodeSelector: 
+    nodeSelector:
       type: dependent_services
     tolerations:
-      - key: "type"
-        operator: "Equal"
-        value: "dependent_services" 
-        effect: "NoSchedule"
+    - key: "type"
+      operator: "Equal"
+      value: "dependent_services"
+      effect: "NoSchedule"
 
   prometheus:
     enabled: true
     prometheusSpec:
-      tolerations: 
-        - key: "type"
-          operator: "Equal"
-          value: "dependent_services" 
-          effect: "NoSchedule"  
+      tolerations:
+      - key: "type"
+        operator: "Equal"
+        value: "dependent_services"
+        effect: "NoSchedule"
       nodeSelector:
         type: dependent_services
       additionalScrapeConfigs:
-        - job_name: 'static-monitor'
-          metrics_path: /probe
-          params:
-            module: [http_2xx]  # Look for a HTTP 200 response.
-          static_configs:
-            - targets:
-              - 'http://<student-api-service-name>:3000/api/v1/health'  # Kubernetes DNS name for your service
-          relabel_configs:
-            - source_labels: [__address__]
-              target_label: __param_target
-            - source_labels: [__param_target]
-              target_label: instance
-            - target_label: __address__
-              replacement: "<blackbox-exporter-service-name>:9115"  # Blackbox exporter's address
-        - job_name: 'app-metrics'
-          metrics_path: /metrics
-          scrape_interval: 15s
-          static_configs:
-            - targets:
-              - '<student-api-service-name>:3000'  # Kubernetes DNS name for your service
-          relabel_configs:
-            - source_labels: [__address__]
-              target_label: instance
-            - target_label: application
-              replacement: 'student-api'
+      - job_name: 'static-monitor'
+        metrics_path: /probe
+        params:
+          module: [ http_2xx ] # Look for a HTTP 200 response.
+        static_configs:
+        - targets:
+          - 'http://<student-api-service-name>:3000/api/v1/health' # Kubernetes DNS name for your service
+        relabel_configs:
+        - source_labels: [ __address__ ]
+          target_label: __param_target
+        - source_labels: [ __param_target ]
+          target_label: instance
+        - target_label: __address__
+          replacement: "<blackbox-exporter-service-name>:9115" # Blackbox exporter's address
+      - job_name: 'app-metrics'
+        metrics_path: /metrics
+        scrape_interval: 15s
+        static_configs:
+        - targets:
+          - '<student-api-service-name>:3000' # Kubernetes DNS name for your service
+        relabel_configs:
+        - source_labels: [ __address__ ]
+          target_label: instance
+        - target_label: application
+          replacement: 'student-api'
 
 prometheus-blackbox-exporter:
   enabled: true
-  nodeSelector: 
+  nodeSelector:
     type: dependent_services
   tolerations:
-    - key: "type"
-      operator: "Equal"
-      value: "dependent_services" 
-      effect: "NoSchedule"
+  - key: "type"
+    operator: "Equal"
+    value: "dependent_services"
+    effect: "NoSchedule"
