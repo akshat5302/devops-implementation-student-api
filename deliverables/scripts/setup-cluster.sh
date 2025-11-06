@@ -36,8 +36,8 @@ echo "=========================================="
 
 # Determine profile name
 if [ -f "$PROJECT_ROOT/minikube.sh" ]; then
-    # Extract profile name from minikube.sh
-    PROFILE_NAME=$(grep -oP 'PROFILE_NAME="\K[^"]+' "$PROJECT_ROOT/minikube.sh" || echo "one2n-task")
+    # Extract profile name from minikube.sh (works on both GNU and BSD grep)
+    PROFILE_NAME=$(grep 'PROFILE_NAME=' "$PROJECT_ROOT/minikube.sh" | sed -E 's/.*PROFILE_NAME="([^"]+)".*/\1/' || echo "atlan-sre-task")
 else
     PROFILE_NAME="atlan-sre-task"
 fi
