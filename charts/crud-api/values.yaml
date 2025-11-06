@@ -5,14 +5,44 @@ dockerRegistry:
   password: ''
 ingress:
   enabled: true
-  appHost: "" # student-api.example.com
+  appHost: "student.atlan.com" # Frontend hostname
+  api: "student-api.atlan.com" # API hostname
   ingressClass: nginx
   clientMaxBodySize: 5m
+
+frontend:
+  enabled: true
+  image:
+    repository: akshat5302/student-crud-frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  apiUrl: "" # If empty, will use http://student-crud-api-api:3000/api/v1 (Kubernetes service DNS)
+  checkApiConnectivity: false # Enable API connectivity check at startup (for testing failures)
+  failOnApiUnreachable: false # Exit container if API is unreachable (causes CrashLoopBackOff when enabled)
+  apiCheckRetries: 3 # Number of retries before giving up
+  apiCheckDelay: 2 # Delay between retries in seconds
+  nodeSelector:
+    type: application
+  tolerations:
+  - key: "type"
+    operator: "Equal"
+    value: "application"
+    effect: "NoSchedule"
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "128Mi"
+      cpu: "100m"
+  serviceAccount: ""
+
 api:
   enabled: true
   image:
     repository: akshat5302/student-crud-api
-    tag: 20241110-6ceba5b
+    tag: latest
   nodeSelector:
     type: application
   tolerations:
@@ -47,17 +77,16 @@ api:
   initContainer:
     image:
       repository: akshat5302/student-crud-api
-      tag: 20241110-6ceba5b
-  autoscaling:
-    enabled: true
-    minReplicas: 1
-    maxReplicas: 5
-    targetCPUUtilizationPercentage: 70
-    targetMemoryUtilizationPercentage: 80
+      tag: latest
+
 postgres:
   local_setup: true
   image: postgres:15.7-alpine
   servicePort: 5432
+  remote_db_url: ""
+  pgDb: student_db
+  pgUser: akshat
+  pgPassword: 12345
   storageClass: standard
   volumeSize: 1Gi
   pullPolicy: IfNotPresent
@@ -69,67 +98,40 @@ postgres:
     operator: "Equal"
     value: "database"
     effect: "NoSchedule"
-  resources:
-    requests:
-      memory: "256Mi"
-      cpu: "200m"
-    limits:
-      memory: "512Mi"
-      cpu: "500m"
-  livenessProbe:
-    exec:
-      command:
-      - /bin/sh
-      - -c
-      - pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-postgres}
-    initialDelaySeconds: 30
-    periodSeconds: 10
-    timeoutSeconds: 5
-    failureThreshold: 3
-  readinessProbe:
-    exec:
-      command:
-      - /bin/sh
-      - -c
-      - pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-postgres}
-    initialDelaySeconds: 10
-    periodSeconds: 5
-    timeoutSeconds: 3
-    failureThreshold: 3
+
 externalSecret:
-  enabled: true
+  enabled: false
   refreshInterval: "1h"
   target:
     name: "api-db-secrets"
     creationPolicy: "Owner"
   data:
-    - secretKey: "POSTGRES_USER"
-      remoteRef:
-        key: "kv/postgres-secret"
-        property: "POSTGRES_USER"
-    - secretKey: "POSTGRES_PASSWORD"
-      remoteRef:
-        key: "kv/postgres-secret"
-        property: "POSTGRES_PASSWORD"
-    - secretKey: "POSTGRES_DB"
-      remoteRef:
-        key: "kv/postgres-secret"
-        property: "POSTGRES_DB"
-    - secretKey: "DATABASE_URL"
-      remoteRef:
-        key: "kv/postgres-secret"
-        property: "DATABASE_URL"
+  - secretKey: "POSTGRES_USER"
+    remoteRef:
+      key: "kv/postgres-secret"
+      property: "POSTGRES_USER"
+  - secretKey: "POSTGRES_PASSWORD"
+    remoteRef:
+      key: "kv/postgres-secret"
+      property: "POSTGRES_PASSWORD"
+  - secretKey: "POSTGRES_DB"
+    remoteRef:
+      key: "kv/postgres-secret"
+      property: "POSTGRES_DB"
+  - secretKey: "DATABASE_URL"
+    remoteRef:
+      key: "kv/postgres-secret"
+      property: "DATABASE_URL"
+
 vault_setup:
   secretStore:
     name: vault-backend
-  server: "http://<vault-setup-service>.<vault-namespace>.svc.cluster.local:8200"
+  server: "http://vault-setup.vault.svc.cluster.local:8200"
   path: "kv"
   version: "v2"
   auth:
     tokenSecretRef:
       name: "vault-token-secret"
       key: "vault-token"
-
 networkPolicy:
-  enabled: false  # Set to true to enable network policies
-
+  enabled: false

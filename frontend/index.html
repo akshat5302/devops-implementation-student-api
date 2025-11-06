@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Management System</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎓 Student Management System</h1>
+            <p class="subtitle">Manage your students with ease</p>
+        </header>
+
+        <div class="api-config">
+            <label for="apiUrl">API Base URL:</label>
+            <input type="text" id="apiUrl" placeholder="http://localhost:3000/api/v1">
+            <button onclick="updateApiUrl()">Update</button>
+        </div>
+
+        <div class="form-section">
+            <h2 id="form-title">Add New Student</h2>
+            <form id="student-form">
+                <input type="hidden" id="student-id" value="">
+                <div class="form-group">
+                    <label for="name">Name:</label>
+                    <input type="text" id="name" required placeholder="Enter student name">
+                </div>
+                <div class="form-group">
+                    <label for="email">Email:</label>
+                    <input type="email" id="email" required placeholder="Enter student email">
+                </div>
+                <div class="form-actions">
+                    <button type="submit" id="submit-btn">Add Student</button>
+                    <button type="button" id="cancel-btn" onclick="resetForm()" style="display: none;">Cancel</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="students-section">
+            <div class="section-header">
+                <h2>Students List</h2>
+                <button onclick="loadStudents()" class="refresh-btn">🔄 Refresh</button>
+            </div>
+            <div id="loading" class="loading" style="display: none;">Loading students...</div>
+            <div id="error" class="error" style="display: none;"></div>
+            <div id="students-list" class="students-list"></div>
+        </div>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
+

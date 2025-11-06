@@ -6,8 +6,13 @@ metadata:
 data:
     {{- if .Values.postgres.local_setup }}
     POSTGRES_HOST: {{ .Release.Name }}-api-db
-    POSTGRES_DB: {{ .Values.postgres.pgDb | quote }}
+    POSTGRES_DB: {{ .Values.postgres.pgDb | quote}}
     POSTGRES_USER: {{ .Values.postgres.pgUser | quote}}
+    {{- end }}
+    {{- if .Values.postgres.remote_db_url }}
+    DATABASE_URL: {{ .Values.postgres.remote_db_url | quote }}
+    {{- else }}
+    DATABASE_URL: postgres://{{ .Values.postgres.pgUser }}:{{ .Values.postgres.pgPassword }}@{{ .Release.Name }}-api-db:5432/{{ .Values.postgres.pgDb }}
     {{- end }}
 ---
 {{- if and .Values.postgres.local_setup .Values.api.enabled (not .Values.externalSecret.enabled) }}
