@@ -1,0 +1,143 @@
+groups:
+- name: student-api-alerts
+  interval: 30s
+  rules:
+  # HTTP Error Rate Alert
+  - alert: HighHTTPErrorRate
+    expr: rate(http_errors_total{application="student-api"}[5m]) > 0.1
+    for: 5m
+    labels:
+      severity: warning
+      component: api
+    annotations:
+      summary: "High HTTP error rate detected"
+      description: "HTTP error rate is {{ $value }} errors/sec for application student-api"
+
+  # High Latency Alerts
+  - alert: HighP90Latency
+    expr: histogram_quantile(0.90, rate(http_request_duration_seconds_bucket{application="student-api"}[5m])) > 1
+    for: 5m
+    labels:
+      severity: warning
+      component: api
+    annotations:
+      summary: "High p90 latency detected"
+      description: "p90 latency is {{ $value }}s for application student-api"
+
+  - alert: HighP95Latency
+    expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{application="student-api"}[5m])) > 2
+    for: 5m
+    labels:
+      severity: warning
+      component: api
+    annotations:
+      summary: "High p95 latency detected"
+      description: "p95 latency is {{ $value }}s for application student-api"
+
+  - alert: HighP99Latency
+    expr: histogram_quantile(0.99, rate(http_request_duration_seconds_bucket{application="student-api"}[5m])) > 5
+    for: 5m
+    labels:
+      severity: critical
+      component: api
+    annotations:
+      summary: "High p99 latency detected"
+      description: "p99 latency is {{ $value }}s for application student-api"
+
+  # Database Error Alert
+  - alert: DatabaseErrors
+    expr: rate(db_error_total{application="student-api"}[5m]) > 0.05
+    for: 5m
+    labels:
+      severity: warning
+      component: database
+    annotations:
+      summary: "Database errors detected"
+      description: "Database error rate is {{ $value }} errors/sec"
+
+  # High Database Connection Count
+  - alert: HighDatabaseConnections
+    expr: db_connection_count{application="student-api"} > 50
+    for: 5m
+    labels:
+      severity: warning
+      component: database
+    annotations:
+      summary: "High database connection count"
+      description: "Database has {{ $value }} active connections"
+
+  # Pod CPU Usage
+  - alert: HighPodCPUUsage
+    expr: rate(container_cpu_usage_seconds_total{pod=~"student-crud-api-api-.*"}[5m]) * 100 > 80
+    for: 10m
+    labels:
+      severity: warning
+      component: api
+    annotations:
+      summary: "High CPU usage on pod"
+      description: "Pod {{ $labels.pod }} CPU usage is {{ $value }}%"
+
+  # Pod Memory Usage
+  - alert: HighPodMemoryUsage
+    expr: (container_memory_working_set_bytes{pod=~"student-crud-api-api-.*"} / container_spec_memory_limit_bytes{pod=~"student-crud-api-api-.*"}) * 100 > 85
+    for: 10m
+    labels:
+      severity: warning
+      component: api
+    annotations:
+      summary: "High memory usage on pod"
+      description: "Pod {{ $labels.pod }} memory usage is {{ $value }}%"
+
+  # Pod CrashLoopBackOff
+  - alert: PodCrashLoopBackOff
+    expr: kube_pod_container_status_waiting_reason{reason="CrashLoopBackOff",pod=~"student-crud-api-.*"} > 0
+    for: 5m
+    labels:
+      severity: critical
+      component: api
+    annotations:
+      summary: "Pod in CrashLoopBackOff"
+      description: "Pod {{ $labels.pod }} is in CrashLoopBackOff state"
+
+  # Pod Not Ready
+  - alert: PodNotReady
+    expr: kube_pod_status_phase{phase!="Running",pod=~"student-crud-api-.*"} > 0
+    for: 10m
+    labels:
+      severity: warning
+      component: api
+    annotations:
+      summary: "Pod not ready"
+      description: "Pod {{ $labels.pod }} is not in Running state"
+
+  # High Restart Count
+  - alert: HighPodRestartCount
+    expr: increase(kube_pod_container_status_restarts_total{pod=~"student-crud-api-.*"}[1h]) > 5
+    labels:
+      severity: warning
+      component: api
+    annotations:
+      summary: "High pod restart count"
+      description: "Pod {{ $labels.pod }} has restarted {{ $value }} times in the last hour"
+
+  # Service Endpoints Down
+  - alert: ServiceEndpointsDown
+    expr: kube_endpoint_address_available{endpoint=~"student-crud-api-.*"} == 0
+    for: 5m
+    labels:
+      severity: critical
+      component: api
+    annotations:
+      summary: "Service has no endpoints"
+      description: "Service {{ $labels.endpoint }} has no available endpoints"
+
+  # Database Query Duration Alert
+  - alert: SlowDatabaseQueries
+    expr: histogram_quantile(0.95, rate(db_query_duration_seconds_bucket{application="student-api"}[5m])) > 1
+    for: 10m
+    labels:
+      severity: warning
+      component: database
+    annotations:
+      summary: "Slow database queries detected"
+      description: "p95 database query duration is {{ $value }}s"

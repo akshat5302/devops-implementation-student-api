@@ -47,6 +47,10 @@ spec:
         name: {{ .Release.Name }}-api-db
         stdin: true
         tty: true
+        ports:
+        - name: postgres
+          containerPort: 5432
+          protocol: TCP
         env:
           - name: PGDATA
             value: /var/lib/postgresql/data/crud-api-db
@@ -58,6 +62,18 @@ spec:
           - secretRef:
               name: {{ .Release.Name }}-api-db-secrets
         {{- end }}
+        {{- with .Values.postgres.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.postgres.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.postgres.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
         volumeMounts:
         - mountPath: /var/lib/postgresql/data
           name: pvc-{{ .Release.Name }}-api-db-vol
@@ -65,11 +81,7 @@ spec:
       serviceAccount: {{ .Release.Name }}-srv-account
       serviceAccountName: {{ .Release.Name }}-srv-account
   volumeClaimTemplates:
-  - apiVersion: v1
-    kind: PersistentVolumeClaim
-    metadata:
-      creationTimestamp: null
-      namespace: {{ .Release.Namespace }}
+  - metadata:
       name: pvc-{{ .Release.Name }}-api-db-vol
     spec:
       accessModes:
@@ -77,8 +89,9 @@ spec:
       resources:
         requests:
           storage: {{ .Values.postgres.volumeSize | default "1Gi" | quote }}
-      storageClassName: {{ .Values.postgres.storageClass | default "" | quote }}
-      volumeMode: Filesystem
+      {{- if .Values.postgres.storageClass }}
+      storageClassName: {{ .Values.postgres.storageClass | quote }}
+      {{- end }}
 ---
 {{- end }}
 

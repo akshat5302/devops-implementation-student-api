@@ -65,6 +65,10 @@ spec:
       - name: api
         image: {{ .Values.api.image.repository }}:{{ .Values.api.image.tag }}
         imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 3000
+          protocol: TCP
         envFrom:
           - configMapRef:
               name: {{ .Release.Name }}-api-config
@@ -74,6 +78,18 @@ spec:
         {{- else }}
           - secretRef:
               name: {{ .Release.Name }}-api-db-secrets
+        {{- end }}
+        {{- with .Values.api.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.api.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.api.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
         {{- end }}
       serviceAccount: {{ .Release.Name }}-srv-account
       serviceAccountName: {{ .Release.Name }}-srv-account
