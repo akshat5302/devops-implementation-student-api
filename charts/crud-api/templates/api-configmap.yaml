@@ -22,6 +22,8 @@ metadata:
   name: {{ .Release.Name }}-api-db-secrets 
   namespace: {{ .Release.Namespace }}
 stringData:
+    POSTGRES_USER: {{ .Values.postgres.pgUser | quote}}
     POSTGRES_PASSWORD: {{ .Values.postgres.pgPassword | quote}}
+    POSTGRES_DB: {{ .Values.postgres.pgDb | quote}}
 {{- end }}
 

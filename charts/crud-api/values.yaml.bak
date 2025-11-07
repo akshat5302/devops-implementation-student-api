@@ -1,0 +1,135 @@
+dockerRegistry:
+  enabled: false
+  registry: docker.io
+  loginid: akshat5302
+  password: ''
+ingress:
+  enabled: true
+  appHost: "" # student-api.example.com
+  ingressClass: nginx
+  clientMaxBodySize: 5m
+api:
+  enabled: true
+  image:
+    repository: akshat5302/student-crud-api
+    tag: 20241110-6ceba5b
+  nodeSelector:
+    type: application
+  tolerations:
+  - key: "type"
+    operator: "Equal"
+    value: "application"
+    effect: "NoSchedule"
+  replicaCount: 1
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "200m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  livenessProbe:
+    httpGet:
+      path: /api/v1/health
+      port: 3000
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readinessProbe:
+    httpGet:
+      path: /api/v1/health
+      port: 3000
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+  initContainer:
+    image:
+      repository: akshat5302/student-crud-api
+      tag: 20241110-6ceba5b
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+postgres:
+  local_setup: true
+  image: postgres:15.7-alpine
+  servicePort: 5432
+  storageClass: standard
+  volumeSize: 1Gi
+  pullPolicy: IfNotPresent
+  assign_cluster_ip: false
+  nodeSelector:
+    type: database
+  tolerations:
+  - key: "type"
+    operator: "Equal"
+    value: "database"
+    effect: "NoSchedule"
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "200m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  livenessProbe:
+    exec:
+      command:
+      - /bin/sh
+      - -c
+      - pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-postgres}
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readinessProbe:
+    exec:
+      command:
+      - /bin/sh
+      - -c
+      - pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-postgres}
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+externalSecret:
+  enabled: true
+  refreshInterval: "1h"
+  target:
+    name: "api-db-secrets"
+    creationPolicy: "Owner"
+  data:
+    - secretKey: "POSTGRES_USER"
+      remoteRef:
+        key: "kv/postgres-secret"
+        property: "POSTGRES_USER"
+    - secretKey: "POSTGRES_PASSWORD"
+      remoteRef:
+        key: "kv/postgres-secret"
+        property: "POSTGRES_PASSWORD"
+    - secretKey: "POSTGRES_DB"
+      remoteRef:
+        key: "kv/postgres-secret"
+        property: "POSTGRES_DB"
+    - secretKey: "DATABASE_URL"
+      remoteRef:
+        key: "kv/postgres-secret"
+        property: "DATABASE_URL"
+vault_setup:
+  secretStore:
+    name: vault-backend
+  server: "http://<vault-setup-service>.<vault-namespace>.svc.cluster.local:8200"
+  path: "kv"
+  version: "v2"
+  auth:
+    tokenSecretRef:
+      name: "vault-token-secret"
+      key: "vault-token"
+
+networkPolicy:
+  enabled: false  # Set to true to enable network policies
+
