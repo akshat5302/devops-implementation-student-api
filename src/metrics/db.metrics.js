@@ -10,7 +10,7 @@ class DatabaseMetrics {
         this.dbQueryDuration = new promClient.Histogram({
             name: 'db_query_duration_seconds',
             help: 'Duration of database queries in seconds',
-            labelNames: ['query_type', 'table', 'operation'],
+            labelNames: ['query_type', 'table', 'operation', 'application'],
             buckets: [0.1, 0.3, 0.5, 0.7, 1, 3, 5, 7, 10],
             registers: [metricsController.register]
         });
@@ -18,20 +18,21 @@ class DatabaseMetrics {
         this.dbConnectionCount = new promClient.Gauge({
             name: 'db_connection_count',
             help: 'Number of active database connections',
+            labelNames: ['application'],
             registers: [metricsController.register]
         });
 
         this.dbErrorCount = new promClient.Counter({
             name: 'db_error_total',
             help: 'Total number of database errors',
-            labelNames: ['operation', 'error_type'],
+            labelNames: ['operation', 'error_type', 'application'],
             registers: [metricsController.register]
         });
 
         this.dbQueryCount = new promClient.Counter({
             name: 'db_query_total',
             help: 'Total number of database queries',
-            labelNames: ['query_type', 'table'],
+            labelNames: ['query_type', 'table', 'application'],
             registers: [metricsController.register]
         });
     }
@@ -51,7 +52,8 @@ class DatabaseMetrics {
                 
                 this.dbQueryCount.inc({
                     query_type: queryType,
-                    table: table
+                    table: table,
+                    application: 'student-api'
                 });
             },
 
@@ -65,7 +67,8 @@ class DatabaseMetrics {
                     this.dbQueryDuration.observe({
                         query_type: queryType,
                         table: table,
-                        operation: operation
+                        operation: operation,
+                        application: 'student-api'
                     }, duration);
                 }
             }
@@ -90,7 +93,7 @@ class DatabaseMetrics {
                     const idleConnections = sequelize.connectionManager.pool.idleCount;
                     const activeConnections = totalConnections - idleConnections;
                     
-                    this.dbConnectionCount.set(activeConnections);
+                    this.dbConnectionCount.set({ application: 'student-api' }, activeConnections);
                 } catch (error) {
                     console.error('Error updating connection metrics:', error);
                 }
@@ -102,7 +105,8 @@ class DatabaseMetrics {
             if (error.name && error.name.includes('Sequelize')) {
                 this.dbErrorCount.inc({
                     operation: this.getOperationType(error) || 'unknown',
-                    error_type: error.name || 'unknown'
+                    error_type: error.name || 'unknown',
+                    application: 'student-api'
                 });
             }
         });
