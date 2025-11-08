@@ -1,6 +1,22 @@
 # SRE Implementation Deliverables
 
-This directory contains all deliverables for the SRE implementation of the Student API application.
+This directory contains all deliverables for the SRE implementation of the Student API application, fulfilling all requirements from the SRE Challenge Round.
+
+## 📋 Quick Reference for Evaluators
+
+**Main Report**: See [`SRE-REPORT.md`](./SRE-REPORT.md) for **practical step-by-step demo guide** covering:
+- ✅ Step-by-step instructions to reproduce issues
+- ✅ kubectl commands to diagnose problems
+- ✅ Fixes applied with verification steps
+- ✅ Monitoring dashboards and alerts setup
+- ✅ Screenshot guide for evidence collection
+- ✅ Complete troubleshooting guide
+
+**Key Files**:
+- `SRE-REPORT.md` - **START HERE** - Comprehensive report with all deliverables
+- `prometheus-alerts/student-api-alerts.yaml` - Alert rules for all identified issues
+- `grafana-dashboards/dashboard.json` - Monitoring dashboard
+- `scripts/test-frontend-failure.sh` - Script to reproduce CrashLoopBackOff scenario
 
 ## Directory Structure
 
@@ -37,14 +53,33 @@ deliverables/
 
 ## Files Description
 
-### SRE-REPORT.md
-Comprehensive report documenting:
-- Issues identified and root causes
-- Fixes implemented
-- Configuration changes
-- Verification steps
-- Before/after comparison
-- Future improvements
+### SRE-REPORT.md ⭐ **MAIN DELIVERABLE**
+**Practical step-by-step demo guide - Follow along to reproduce, diagnose, and fix issues:**
+
+**Format**: Hands-on guide with executable kubectl commands
+
+**Sections**:
+1. **Prerequisites** - Required tools and setup
+2. **Step 1: Setup Environment** - Cluster and monitoring setup
+3. **Step 2: Deploy Application with Issues** - Reproduce CrashLoopBackOff using scripts
+4. **Step 3: Observe the Problems** - Initial observations with kubectl
+5. **Step 4: Diagnose Issues** - kubectl commands to identify root causes
+6. **Step 5: Apply Fixes** - Fix configuration issues
+7. **Step 6: Verify Fixes** - Comprehensive verification steps
+8. **Step 7: View Monitoring Dashboards** - Grafana setup and screenshot guide
+9. **Step 8: Test Alerts** - Prometheus alerts configuration
+10. **Root Cause Summary** - All issues documented with evidence
+11. **Configuration Changes** - Before/after comparisons
+
+**Key Features**:
+- ✅ All kubectl commands ready to copy/paste
+- ✅ Expected outputs for each command
+- ✅ Scripts to reproduce failure scenarios (`test-frontend-failure.sh`)
+- ✅ Screenshot guide for evidence collection
+- ✅ Troubleshooting section
+- ✅ Quick reference commands
+
+**See the full guide**: [`SRE-REPORT.md`](./SRE-REPORT.md)
 
 ### Grafana Dashboard
 **File:** `grafana-dashboards/student-api-dashboard.json`

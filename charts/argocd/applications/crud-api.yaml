@@ -6,12 +6,12 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/akshat5302/one2n-sre-bootcamp.git
+    repoURL: https://github.com/akshat5302/devops-implementation-student-api.git
     targetRevision: HEAD
     path: charts/crud-api
     helm:
       valueFiles:
-        - values.yaml
+      - values.yaml
   destination:
     server: https://kubernetes.default.svc
     namespace: student-api
@@ -20,4 +20,4 @@ spec:
       prune: true
       selfHeal: true
     syncOptions:
-      - CreateNamespace=true
+    - CreateNamespace=true

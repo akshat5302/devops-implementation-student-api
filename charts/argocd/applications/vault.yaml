@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/akshat5302/one2n-sre-bootcamp.git
+    repoURL: https://github.com/akshat5302/devops-implementation-student-api.git
     targetRevision: HEAD
     path: charts/vault
     helm:

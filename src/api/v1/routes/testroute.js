@@ -116,6 +116,23 @@ router.get('/trigger-alerts', async (req, res) => {
         });
         break;
 
+      case 'cpu-continuous':
+        // Continuously consume CPU to trigger alert (runs in background)
+        const cpuDuration = parseInt(req.query.duration) || 600000; // 10 minutes default
+        res.status(200).json({ 
+          message: 'Starting continuous CPU load...',
+          duration: cpuDuration,
+          alert: 'HighPodCPUUsage'
+        });
+        // Run CPU-intensive loop in background
+        setImmediate(() => {
+          const endTime = Date.now() + cpuDuration;
+          while (Date.now() < endTime) {
+            Math.sqrt(Math.random() * 1000000);
+          }
+        });
+        break;
+
       case 'memory-intensive':
         // Trigger high memory usage (> 85%)
         const arraySize = parseInt(req.query.size) || 10000000;
@@ -131,6 +148,49 @@ router.get('/trigger-alerts', async (req, res) => {
         });
         break;
 
+      case 'memory-leak':
+        // Continuously allocate memory to cause OOM
+        const leakSize = parseInt(req.query.size) || 50000000; // 50M per allocation
+        const leakCount = parseInt(req.query.count) || 20; // 20 allocations = ~1GB
+        const memoryLeak = [];
+        
+        res.status(200).json({ 
+          message: 'Starting memory leak...',
+          leakSize: leakSize,
+          leakCount: leakCount,
+          alert: 'HighPodMemoryUsage / OOM'
+        });
+        
+        // Allocate memory and keep it referenced
+        for (let i = 0; i < leakCount; i++) {
+          memoryLeak.push(new Array(leakSize).fill('x'.repeat(100)));
+          // Small delay to allow memory allocation
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
+        // Keep memory allocated (don't let it be garbage collected)
+        global.memoryLeak = memoryLeak;
+        break;
+
+      case 'oom':
+        // Force Out of Memory by allocating massive amounts of memory
+        res.status(200).json({ 
+          message: 'Triggering OOM...',
+          alert: 'OOMKilled'
+        });
+        
+        // Allocate memory until OOM
+        const oomArrays = [];
+        try {
+          while (true) {
+            // Allocate 100MB at a time
+            oomArrays.push(new Array(10000000).fill('x'.repeat(100)));
+          }
+        } catch (error) {
+          console.error('OOM triggered:', error);
+        }
+        break;
+
       case 'crash':
         // Trigger pod crash (for testing CrashLoopBackOff)
         res.status(200).json({ 
@@ -143,6 +203,16 @@ router.get('/trigger-alerts', async (req, res) => {
         }, 1000);
         break;
 
+      case 'crash-loop':
+        // Continuously crash the pod to trigger CrashLoopBackOff
+        res.status(200).json({ 
+          message: 'Starting crash loop...',
+          alert: 'PodCrashLoopBackOff'
+        });
+        // Crash immediately
+        process.exit(1);
+        break;
+
       default:
         res.status(400).json({ 
           error: 'Invalid alert type',
@@ -153,8 +223,12 @@ router.get('/trigger-alerts', async (req, res) => {
             'high-db-connections',
             'slow-db-query',
             'cpu-intensive',
+            'cpu-continuous',
             'memory-intensive',
-            'crash'
+            'memory-leak',
+            'oom',
+            'crash',
+            'crash-loop'
           ]
         });
     }

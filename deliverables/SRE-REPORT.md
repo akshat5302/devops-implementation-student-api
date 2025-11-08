@@ -1,380 +1,1076 @@
-# SRE Implementation Report - Student API
+# SRE Challenge Round - Practical Demo Guide
 
-## Executive Summary
+## Repository Information
 
-This report documents the Site Reliability Engineering (SRE) improvements implemented for the Student API application. The implementation focused on enhancing reliability, observability, scalability, and security of the Kubernetes-based application deployment.
+**GitHub Repository**: [https://github.com/akshat5302/devops-implementation-student-api](https://github.com/akshat5302/devops-implementation-student-api)  
+**Branch**: `sre-implementation`  
+**Document Location**: `deliverables/SRE-REPORT.md`
 
-## Issues Identified and Root Causes
-
-### 1. Missing Resource Limits and Requests
-
-**Root Cause:** The API deployment lacked resource limits and requests, which could lead to:
-- Uncontrolled resource consumption
-- Pod eviction due to resource pressure
-- Inability to properly schedule pods
-- Difficulty in capacity planning
-
-**Impact:**
-- Risk of OOMKilled pods
-- Unpredictable performance
-- Potential node resource exhaustion
-
-**Fix Applied:**
-- Added resource requests and limits to all deployments:
-  - API: requests (256Mi memory, 200m CPU), limits (512Mi memory, 500m CPU)
-  - Frontend: requests (128Mi memory, 100m CPU), limits (256Mi memory, 200m CPU)
-  - Database: requests (256Mi memory, 200m CPU), limits (512Mi memory, 500m CPU)
-
-**Files Modified:**
-- `charts/crud-api/values.yaml` - Added resource configurations
-- `charts/crud-api/templates/api-deployment.yaml` - Applied resources to API container
-- `charts/crud-api/templates/frontend-deployment.yaml` - Applied resources to frontend container
-- `charts/crud-api/templates/api-db-statefulset.yaml` - Applied resources to database container
-
-### 2. Missing Health Checks (Liveness and Readiness Probes)
-
-**Root Cause:** No health probes were configured, preventing Kubernetes from:
-- Detecting when containers are actually ready to serve traffic
-- Automatically restarting unhealthy containers
-- Properly managing pod lifecycle
-
-**Impact:**
-- Traffic could be routed to pods that aren't ready
-- Unhealthy pods might continue running indefinitely
-- Manual intervention required for pod recovery
-
-**Fix Applied:**
-- Added liveness and readiness probes to all containers:
-  - API: HTTP GET on `/api/v1/health` endpoint
-  - Frontend: HTTP GET on `/` endpoint
-  - Database: Exec probe using `pg_isready` command
-
-**Configuration:**
-```yaml
-livenessProbe:
-  httpGet:
-    path: /api/v1/health
-    port: 3000
-  initialDelaySeconds: 30
-  periodSeconds: 10
-  timeoutSeconds: 5
-  failureThreshold: 3
-
-readinessProbe:
-  httpGet:
-    path: /api/v1/health
-    port: 3000
-  initialDelaySeconds: 10
-  periodSeconds: 5
-  timeoutSeconds: 3
-  failureThreshold: 3
+**To get started**:
+```bash
+git clone https://github.com/akshat5302/devops-implementation-student-api.git
+cd devops-implementation-student-api
+git checkout sre-implementation
 ```
 
-**Files Modified:**
-- `charts/crud-api/values.yaml` - Added probe configurations
-- `charts/crud-api/templates/api-deployment.yaml` - Applied probes to API
-- `charts/crud-api/templates/frontend-deployment.yaml` - Applied probes to frontend
-- `charts/crud-api/templates/api-db-statefulset.yaml` - Applied probes to database
+---
 
-### 3. Lack of Horizontal Pod Autoscaling (HPA)
+## Overview
 
-**Root Cause:** No autoscaling mechanism was in place to handle varying load conditions.
+This guide provides a hands-on walkthrough of diagnosing and resolving a simulated production outage in a Kubernetes-based Student API application. Follow along step-by-step to reproduce the issues, diagnose them, and apply fixes.
 
-**Impact:**
-- Manual scaling required for traffic spikes
-- Underutilization during low traffic periods
-- Potential service degradation during high load
+**Environment**: Kubernetes (Minikube) with Prometheus/Grafana monitoring  
+**Application**: Student CRUD API (Frontend + Backend API + PostgreSQL Database)
 
-**Fix Applied:**
-- Created HPA resources for API and Frontend deployments
-- Configured CPU and memory-based scaling
-- Set appropriate min/max replica counts and scaling policies
+---
 
-**Configuration:**
-```yaml
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-spec:
-  minReplicas: 1
-  maxReplicas: 5
-  metrics:
-  - type: Resource
-    resource:
-      name: cpu
-      target:
-        type: Utilization
-        averageUtilization: 70
-  - type: Resource
-    resource:
-      name: memory
-      target:
-        type: Utilization
-        averageUtilization: 80
+## Table of Contents
+
+1. [Prerequisites](#prerequisites)
+2. [Step 1: Setup Environment](#step-1-setup-environment)
+3. [Step 2: Deploy Application with Issues](#step-2-deploy-application-with-issues)
+4. [Step 3: Observe the Problems](#step-3-observe-the-problems)
+5. [Step 4: Diagnose Issues](#step-4-diagnose-issues)
+6. [Step 5: Apply Fixes](#step-5-apply-fixes)
+7. [Step 6: Verify Fixes](#step-6-verify-fixes)
+8. [Step 7: View Monitoring Dashboards](#step-7-view-monitoring-dashboards)
+9. [Step 8: Test Alerts](#step-8-test-alerts)
+10. [Root Cause Summary](#root-cause-summary)
+11. [Configuration Changes](#configuration-changes)
+
+---
+
+## Prerequisites
+
+Before starting, ensure you have:
+
+```bash
+# Check required tools
+minikube version
+kubectl version --client
+helm version
 ```
 
-**Files Created:**
-- `charts/crud-api/templates/api-hpa.yaml`
-- `charts/crud-api/templates/frontend-hpa.yaml`
+**Required Tools**:
+- Minikube (for local Kubernetes cluster)
+- kubectl (Kubernetes CLI)
+- Helm 3.8+
+- Docker (for building/pulling images)
 
-### 4. Missing Network Policies
+---
 
-**Root Cause:** No network segmentation or security policies were in place, allowing unrestricted pod-to-pod communication.
+## Step 1: Setup Environment
 
-**Impact:**
-- Security risk from unrestricted network access
-- Potential lateral movement in case of compromise
-- No defense-in-depth strategy
+### 1.1 Clone and Navigate to Project
 
-**Fix Applied:**
-- Created NetworkPolicy resources for API, Frontend, and Database
-- Implemented least-privilege access model
-- Allowed only necessary traffic flows:
-  - Frontend → API
-  - Ingress → Frontend/API
-  - API → Database
-  - Monitoring → All services (for metrics scraping)
-  - DNS resolution for all pods
+```bash
+# Navigate to project root
+cd /path/to/devops-implementation-student-api
 
-**Files Created:**
-- `charts/crud-api/templates/network-policy.yaml`
+# Verify you're in the right directory
+ls -la charts/crud-api/
+```
 
-**Note:** Network policies are disabled by default (`networkPolicy.enabled: false`) and can be enabled when needed.
+### 1.2 Run Setup Script
 
-### 5. Incomplete Observability
+The project includes an automated setup script that handles all cluster setup, monitoring installation, and application deployment:
 
-**Root Cause:** While monitoring stack exists, there were no:
-- Custom Grafana dashboards for application metrics
-- Prometheus alert rules for application-specific issues
-- Comprehensive monitoring coverage
+```bash
+# Navigate to scripts directory
+cd deliverables/scripts
 
-**Impact:**
-- Limited visibility into application health
-- Delayed detection of issues
-- No proactive alerting
+# Make script executable (if not already)
+chmod +x setup-cluster.sh
 
-**Fix Applied:**
-- Created comprehensive Grafana dashboard for application metrics
-- Created Prometheus alert rules for:
-  - High HTTP error rates
-  - High latency (p90, p95, p99)
-  - Database errors and connection issues
-  - Pod resource usage (CPU, memory)
-  - Pod failures and restarts
-  - Service endpoint availability
+# Run the setup script
+./setup-cluster.sh
+```
 
-**Files Created:**
-- `deliverables/grafana-dashboards/student-api-dashboard.json`
-- `deliverables/prometheus-alerts/student-api-alerts.yaml`
+**What the script does**:
+1. Sets up Minikube cluster (using `minikube.sh`)
+2. Creates namespaces (student-api, monitoring, vault)
+3. Installs monitoring stack (Prometheus/Grafana)
+4. Optionally installs Vault and External Secrets
+5. Deploys Student API application
+6. Applies Prometheus alert rules
 
-## Improvements Implemented
+**During setup, you'll be prompted**:
+- Whether to recreate existing cluster (if one exists)
+- Whether to install Vault (optional - answer 'n' for this demo)
+- Whether to install External Secrets (optional - answer 'n' for this demo)
+- Whether to deploy with External Secrets (answer 'n' - will use Kubernetes secrets)
 
-### 1. Resource Management
-- **Before:** No resource limits/requests
-- **After:** Proper resource requests and limits for all containers
-- **Benefit:** Better resource utilization, predictable performance, prevents resource exhaustion
+**Expected Output** (excerpt):
+```
+==========================================
+SRE Implementation Setup Script
+==========================================
 
-### 2. Health Monitoring
-- **Before:** No health checks
-- **After:** Liveness and readiness probes on all containers
-- **Benefit:** Automatic recovery, proper traffic routing, better reliability
+Checking prerequisites...
+✓ All prerequisites met
 
-### 3. Scalability
-- **Before:** Fixed replica count
-- **After:** HPA with CPU and memory-based scaling
-- **Benefit:** Automatic scaling based on load, cost optimization
+Step 1: Setting up Minikube cluster
+...
+Step 2: Creating namespaces
+✓ Namespaces created
 
-### 4. Security
-- **Before:** No network segmentation
-- **After:** Network policies with least-privilege access
-- **Benefit:** Reduced attack surface, defense-in-depth
+Step 3: Installing Monitoring Stack
+...
+Step 6: Deploying Student API
+...
+✓ Student API deployment initiated (without External Secrets)
 
-### 5. Observability
-- **Before:** Basic monitoring
-- **After:** Comprehensive dashboards and alerting
-- **Benefit:** Better visibility, proactive issue detection
+Step 8: Applying Prometheus Alert Rules
+✓ Alert rules applied
 
-## Configuration Changes Summary
+Setup Complete!
+```
 
-### values.yaml Changes
-1. Added `api.resources` section with requests and limits
-2. Added `api.livenessProbe` and `api.readinessProbe` configurations
-3. Added `api.autoscaling` section for HPA configuration
-4. Added `frontend.resources` (updated existing values)
-5. Added `frontend.livenessProbe` and `frontend.readinessProbe`
-6. Added `frontend.autoscaling` section
-7. Added `postgres.resources` section
-8. Added `postgres.livenessProbe` and `postgres.readinessProbe`
-9. Added `networkPolicy.enabled` flag
+### 1.3 Wait for Pods to be Ready
 
-### New Template Files
-1. `api-hpa.yaml` - Horizontal Pod Autoscaler for API
-2. `frontend-hpa.yaml` - Horizontal Pod Autoscaler for Frontend
-3. `network-policy.yaml` - Network policies for all components
+After the setup script completes, wait for all pods to be ready:
 
-### Deployment Template Updates
-1. `api-deployment.yaml` - Added ports, resources, and probes
-2. `frontend-deployment.yaml` - Added probes
-3. `api-db-statefulset.yaml` - Added ports, resources, and probes
+```bash
+# Check monitoring stack pods
+kubectl get pods -n monitoring
 
-## Verification and Testing
+# Check application pods
+kubectl get pods -n student-api
 
-### Verification Scripts Created
-1. `deliverables/scripts/setup-cluster.sh` - Automated cluster setup
-2. `deliverables/scripts/troubleshoot.sh` - Diagnostic script
-3. `deliverables/scripts/verify-deployment.sh` - Deployment verification
+# Wait for all pods to be ready (optional)
+kubectl wait --for=condition=ready pod --all -n monitoring --timeout=300s
+kubectl wait --for=condition=ready pod --all -n student-api --timeout=300s
+```
 
-### Verification Steps
-1. **Pod Status:** All pods should be in Running state with Ready status
-2. **Service Endpoints:** All services should have active endpoints
-3. **Health Checks:** Health endpoints should respond correctly
-4. **Database Connectivity:** API pods should be able to connect to database
-5. **API Functionality:** CRUD operations should work correctly
-6. **Metrics:** Metrics endpoint should expose Prometheus metrics
-7. **HPA:** Autoscalers should be created and functional
-8. **Resource Limits:** All pods should have resource limits configured
-9. **Health Probes:** All containers should have liveness and readiness probes
+**Expected Output** (after a few minutes):
+```
+# Monitoring namespace
+NAME                                                     READY   STATUS    RESTARTS   AGE
+observability-grafana-xxx                                1/1     Running   0          2m
+observability-kube-prometheus-stack-prometheus-xxx       2/2     Running   0          2m
+...
 
-### Test Commands
+# Student API namespace
+NAME                                    READY   STATUS    RESTARTS   AGE
+student-crud-api-api-xxx                1/1     Running   0          1m
+student-crud-api-api-db-0               1/1     Running   0          1m
+student-crud-api-frontend-xxx           1/1     Running   0          1m
+```
+
+---
+
+## Step 2: Deploy Application with Issues
+
+### 2.1 Verify Initial Deployment
+
+The setup script already deployed the application. Verify it's running:
+
 ```bash
 # Check pod status
 kubectl get pods -n student-api
-
-# Check services and endpoints
-kubectl get svc,endpoints -n student-api
-
-# Test health endpoint
-kubectl exec -n student-api <api-pod> -- wget -qO- http://localhost:3000/api/v1/health
-
-# Test database connectivity
-kubectl exec -n student-api <api-pod> -- pg_isready -h student-crud-api-api-db -p 5432
-
-# Check HPA status
-kubectl get hpa -n student-api
-
-# Check resource usage
-kubectl top pods -n student-api
-
-# View pod logs
-kubectl logs <pod-name> -n student-api
 ```
 
-## Monitoring and Alerting
+**Expected Output** (Initial - should be healthy):
+```
+NAME                                    READY   STATUS    RESTARTS   AGE
+student-crud-api-api-xxx                1/1     Running   0          2m
+student-crud-api-api-db-0               1/1     Running   0          2m
+student-crud-api-frontend-xxx           1/1     Running   0          2m
+```
 
-### Grafana Dashboard
-The dashboard includes panels for:
-- HTTP request rate and error rate
-- Request latency (p50, p90, p95, p99)
-- Active requests
-- Database query duration and connection count
-- Database errors
-- Pod CPU and memory usage
-- Pod restart count
+### 2.2 Trigger CrashLoopBackOff Scenario
 
-### Prometheus Alerts
-Alerts configured for:
-- High HTTP error rate (>0.1 errors/sec)
-- High latency (p90>1s, p95>2s, p99>5s)
-- Database errors (>0.05 errors/sec)
-- High database connections (>50)
-- High pod CPU usage (>80%)
-- High pod memory usage (>85%)
-- Pod CrashLoopBackOff
-- Pod not ready
-- High restart count (>5 in 1 hour)
-- Service endpoints down
-- Slow database queries (p95>1s)
+Use the provided script to simulate the frontend failure:
 
-## Mitigations and Future Improvements
+```bash
+# Navigate to scripts directory
+cd deliverables/scripts
 
-### Recommended Improvements
-1. **CI/CD Integration:**
-   - Add validation checks for resource limits in CI pipeline
-   - Validate health probe configurations before deployment
-   - Automated testing of network policies
+# Make script executable
+chmod +x test-frontend-failure.sh
 
-2. **Additional Monitoring:**
-   - Set up log aggregation and analysis
-   - Implement distributed tracing
-   - Add business metrics monitoring
+# Enable faulty configuration (triggers CrashLoopBackOff)
+./test-frontend-failure.sh enable
+```
 
-3. **Security Enhancements:**
-   - Enable network policies in production
-   - Implement Pod Security Standards
-   - Add secret rotation policies
-   - Regular security scanning
+**What this does**:
+- Sets incorrect API URL: `http://wrong-backend-url:3000/api/v1`
+- Enables `checkApiConnectivity: true`
+- Enables `failOnApiUnreachable: true` (causes container to exit)
 
-4. **Performance Optimization:**
-   - Fine-tune HPA thresholds based on actual usage
-   - Optimize database connection pooling
-   - Implement caching strategies
+### 2.3 Observe the Failure
 
-5. **Disaster Recovery:**
-   - Document backup and restore procedures
-   - Test failover scenarios
-   - Implement multi-region deployment
+```bash
+# Watch pod status
+kubectl get pods -n student-api -w
+```
 
-6. **Documentation:**
-   - Create runbooks for common issues
-   - Document escalation procedures
-   - Maintain incident response playbooks
+**Expected Output** (After a few seconds):
+```
+NAME                                    READY   STATUS             RESTARTS   AGE
+student-crud-api-frontend-xxx           0/1     CrashLoopBackOff   3          2m
+```
 
-## Before and After Comparison
+**Press Ctrl+C to stop watching**
 
-### Before Implementation
-- ❌ No resource limits
-- ❌ No health probes
-- ❌ No autoscaling
-- ❌ No network policies
-- ❌ Limited observability
-- ❌ Manual scaling required
-- ❌ No proactive alerting
+---
 
-### After Implementation
-- ✅ Resource limits and requests configured
-- ✅ Liveness and readiness probes on all containers
-- ✅ HPA for automatic scaling
-- ✅ Network policies available (optional)
-- ✅ Comprehensive Grafana dashboard
-- ✅ Prometheus alert rules
-- ✅ Automated setup and verification scripts
+## Step 3: Observe the Problems
 
-## Conclusion
+### 3.1 Check Pod Status
 
-The SRE improvements implemented significantly enhance the reliability, observability, and maintainability of the Student API application. The addition of resource limits, health probes, autoscaling, and comprehensive monitoring provides a solid foundation for production operations.
+```bash
+# Get all pods in student-api namespace
+kubectl get pods -n student-api
+```
 
-All changes are backward compatible and can be deployed incrementally. The network policies are disabled by default to allow gradual adoption.
+**Observe**:
+- Frontend pod in `CrashLoopBackOff` state
+- High restart count
+- Pod not ready (0/1)
 
-## Files Modified/Created
+### 3.2 Check Service Endpoints
 
-### Modified Files
-1. `charts/crud-api/values.yaml`
-2. `charts/crud-api/templates/api-deployment.yaml`
-3. `charts/crud-api/templates/frontend-deployment.yaml`
-4. `charts/crud-api/templates/api-db-statefulset.yaml`
+```bash
+# Check if services have endpoints
+kubectl get svc,endpoints -n student-api
+```
 
-### New Files
-1. `charts/crud-api/templates/api-hpa.yaml`
-2. `charts/crud-api/templates/frontend-hpa.yaml`
-3. `charts/crud-api/templates/network-policy.yaml`
-4. `deliverables/grafana-dashboards/student-api-dashboard.json`
-5. `deliverables/prometheus-alerts/student-api-alerts.yaml`
-6. `deliverables/scripts/setup-cluster.sh`
-7. `deliverables/scripts/troubleshoot.sh`
-8. `deliverables/scripts/verify-deployment.sh`
-9. `deliverables/SRE-REPORT.md` (this file)
+**Observe**:
+- Frontend service may have no endpoints (if pod keeps crashing)
+- API service should have endpoints
 
-## Appendix: Diagnostic Commands
+### 3.3 Check Resource Usage
+
+```bash
+# Check resource usage (requires metrics-server)
+kubectl top pods -n student-api
+```
+
+**Note**: If metrics-server is not installed, this command will fail. You can install it or skip this step.
+
+---
+
+## Step 4: Diagnose Issues
+
+### 4.1 Check Pod Logs
+
+```bash
+# Get frontend pod name
+FRONTEND_POD=$(kubectl get pods -n student-api -l app=student-crud-api-frontend -o jsonpath='{.items[0].metadata.name}')
+
+# View current logs
+kubectl logs -n student-api $FRONTEND_POD
+
+# View previous container logs (if crashed)
+kubectl logs -n student-api $FRONTEND_POD --previous
+```
+
+**Expected Log Output**:
+```
+Checking API connectivity to http://wrong-backend-url:3000/api/v1...
+Attempt 1/3: Checking wrong-backend-url:3000...
+❌ API check failed (attempt 1/3), retrying in 2s...
+❌ API is NOT reachable at http://wrong-backend-url:3000/api/v1 after 3 attempts
+🚨 FAIL_ON_API_UNREACHABLE is true - exiting container
+```
+
+**Root Cause Identified**: Frontend configured with wrong API URL and exits on connection failure.
+
+### 4.2 Check Pod Events
+
+```bash
+# Describe the failing pod
+kubectl describe pod -n student-api $FRONTEND_POD
+```
+
+**Look for Events section**:
+```
+Events:
+  Type     Reason          Age                From               Message
+  ----     ------          ----               ----               -------
+  Warning  Failed          30s (x3 over 2m)    kubelet            Error: container exited with code 1
+  Warning  BackOff         15s (x2 over 1m)   kubelet            Back-off restarting failed container
+```
+
+### 4.3 Check Service Configuration
+
+```bash
+# Check frontend service
+kubectl describe service -n student-api student-crud-api-frontend
+```
+
+**Observe**:
+- Service selector: `app=student-crud-api-frontend`
+- Endpoints: May be empty or showing pod IP
+
+### 4.4 Check ConfigMap
+
+```bash
+# View frontend ConfigMap (after enabling faulty config)
+kubectl get configmap -n student-api student-crud-api-frontend-config -o yaml
+```
+
+**Observe** (after running `test-frontend-failure.sh enable`):
+- `API_BASE_URL: "http://wrong-backend-url:3000/api/v1"` (incorrect)
+- `FAIL_ON_API_UNREACHABLE: "true"` (causes exit)
+
+**Observe** (before running failure script - correct configuration):
+- `API_BASE_URL: "http://student-crud-api-api:3000/api/v1"` (uses Kubernetes service DNS)
+- `FAIL_ON_API_UNREACHABLE: "false"`
+
+**Note**: The frontend uses Kubernetes service DNS (`student-crud-api-api:3000`) instead of external domains.
+
+### 4.5 Test DNS Resolution
+
+```bash
+# Test DNS from within cluster
+kubectl run -it --rm debug --image=busybox --restart=Never -n student-api -- nslookup student-crud-api-api
+```
+
+**Expected Output** (for correct service):
+```
+Server:    10.96.0.10
+Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
+
+Name:      student-crud-api-api
+Address 1: 10.244.1.5 student-crud-api-api.student-api.svc.cluster.local
+```
+
+**Note**: The frontend is trying to reach `wrong-backend-url` which doesn't exist, so DNS will fail for that.
+
+### 4.6 Check Resource Limits
+
+```bash
+# Check pod resource configuration
+kubectl get pod -n student-api $FRONTEND_POD -o jsonpath='{.spec.containers[0].resources}' | jq
+```
+
+**Observe**:
+- Memory limits: `128Mi`
+- CPU limits: `100m`
+
+### 4.7 Check Node Conditions
+
+```bash
+# Check node resource pressure
+kubectl describe node minikube | grep -A 10 Conditions
+```
+
+**Look for**:
+- `MemoryPressure: True/False`
+- `DiskPressure: True/False`
+
+---
+
+## Step 5: Apply Fixes
+
+### 5.1 Fix Frontend Configuration
+
+Use the provided script to fix the configuration:
+
+```bash
+# Disable faulty configuration (fixes the issue)
+cd deliverables/scripts
+./test-frontend-failure.sh disable
+```
+
+**What this does**:
+- Removes incorrect API URL (sets to empty, which uses Kubernetes service DNS: `student-crud-api-api:3000`)
+- Sets `checkApiConnectivity: false`
+- Sets `failOnApiUnreachable: false`
+
+**OR manually edit values.yaml**:
+
+```bash
+# Edit values file
+vim charts/crud-api/values.yaml
+
+# Change these values:
+frontend:
+  apiUrl: ""  # Empty = use Kubernetes service DNS (student-crud-api-api:3000)
+  checkApiConnectivity: false
+  failOnApiUnreachable: false
+
+# Upgrade the release
+helm upgrade student-crud-api ./charts/crud-api -n student-api --wait
+```
+
+### 5.2 Verify Configuration Change
+
+```bash
+# Check ConfigMap was updated
+kubectl get configmap -n student-api student-crud-api-frontend-config -o yaml | grep -A 2 API_BASE_URL
+```
+
+**Expected** (after fix):
+```yaml
+API_BASE_URL: http://student-crud-api-api:3000/api/v1
+```
+
+**Note**: The frontend uses Kubernetes service DNS (`student-crud-api-api.student-api.svc.cluster.local:3000` or short form `student-crud-api-api:3000`) for internal communication.
+
+### 5.3 Wait for Pod Recovery
+
+```bash
+# Watch pods recover
+kubectl get pods -n student-api -w
+```
+
+**Expected Output** (after ~30 seconds):
+```
+NAME                                    READY   STATUS    RESTARTS   AGE
+student-crud-api-frontend-xxx           1/1     Running   0          1m
+```
+
+**Press Ctrl+C to stop watching**
+
+---
+
+## Step 6: Verify Fixes
+
+### 6.1 Verify Pod Status
+
+```bash
+# Check all pods are running
+kubectl get pods -n student-api
+```
+
+**Expected Output** (after fixes):
+```
+NAME                                    READY   STATUS    RESTARTS   AGE
+student-crud-api-api-xxx                1/1     Running   0          10m
+student-crud-api-api-db-0               1/1     Running   0          10m
+student-crud-api-frontend-xxx           1/1     Running   0          2m
+```
+
+**✅ All pods should be in `Running` state with `1/1` ready**
+
+**If pods are still not ready, check**:
+```bash
+# Check pod events
+kubectl describe pod -n student-api <pod-name>
+
+# Check if pods are being recreated
+kubectl get pods -n student-api -w
+```
+
+### 6.2 Verify Service Endpoints
+
+```bash
+# Check service endpoints
+kubectl get svc,endpoints -n student-api
+```
+
+**Expected Output**:
+```
+NAME                           TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE
+service/student-crud-api-api   ClusterIP   10.96.xxx.xxx   <none>        3000/TCP   10m
+service/student-crud-api-frontend ClusterIP 10.96.xxx.xxx  <none>        8080/TCP   10m
+
+NAME                           ENDPOINTS                    AGE
+endpoints/student-crud-api-api  10.244.x.x:3000            10m
+endpoints/student-crud-api-frontend 10.244.x.x:8080        10m
+```
+
+**✅ All services should have active endpoints (IP addresses shown)**
+
+**If endpoints are empty**:
+```bash
+# Check if pods are ready
+kubectl get pods -n student-api
+
+# Check service selector matches pod labels
+kubectl describe service -n student-api student-crud-api-frontend
+kubectl get pods -n student-api --show-labels
+```
+
+### 6.3 Test API Health Endpoint
+
+```bash
+# Get API pod name
+API_POD=$(kubectl get pods -n student-api -l app=student-crud-api-api -o jsonpath='{.items[0].metadata.name}')
+
+# Verify pod exists
+if [ -z "$API_POD" ]; then
+  echo "Error: API pod not found. Check with: kubectl get pods -n student-api"
+  exit 1
+fi
+
+echo "Testing health endpoint on pod: $API_POD"
+
+# Test health endpoint (try wget first, fallback to curl)
+kubectl exec -n student-api $API_POD -- sh -c 'wget -qO- http://localhost:3000/api/v1/health 2>/dev/null || curl -s http://localhost:3000/api/v1/health'
+```
+
+**Expected Output**:
+```json
+{"status":"healthy","timestamp":"2024-01-XX","uptime":600}
+```
+
+**✅ Health endpoint should return healthy status**
+
+### 6.4 Test Frontend to Backend Connectivity
+
+```bash
+# Get frontend pod name
+FRONTEND_POD=$(kubectl get pods -n student-api -l app=student-crud-api-frontend -o jsonpath='{.items[0].metadata.name}')
+
+# Verify pod name is set
+if [ -z "$FRONTEND_POD" ]; then
+  echo "Error: Frontend pod not found. Check with: kubectl get pods -n student-api"
+  exit 1
+fi
+
+echo "Testing connectivity from frontend pod: $FRONTEND_POD"
+
+# Test connectivity from frontend to backend (try wget first, fallback to curl)
+kubectl exec -n student-api $FRONTEND_POD -- sh -c 'wget -qO- http://student-crud-api-api.student-api.svc.cluster.local:3000/api/v1/health 2>/dev/null || curl -s http://student-crud-api-api.student-api.svc.cluster.local:3000/api/v1/health'
+```
+
+**Expected Output**:
+```json
+{"status":"healthy","timestamp":"2024-01-XX","uptime":600}
+```
+
+**✅ Frontend can successfully reach backend via Kubernetes DNS**
+
+**If DNS resolution fails**:
+```bash
+# Test DNS from within pod
+kubectl exec -n student-api $FRONTEND_POD -- nslookup student-crud-api-api.student-api.svc.cluster.local
+
+# Or use busybox for DNS test
+kubectl run -it --rm debug --image=busybox --restart=Never -n student-api -- nslookup student-crud-api-api
+```
+
+### 6.5 Test API Functionality
+
+```bash
+# Test GET students endpoint (try wget first, fallback to curl)
+kubectl exec -n student-api $API_POD -- sh -c 'wget -qO- http://localhost:3000/api/v1/students 2>/dev/null || curl -s http://localhost:3000/api/v1/students'
+```
+
+**Expected Output**:
+```json
+[]
+```
+
+**✅ API endpoint responding correctly (empty array is expected for new database)**
+
+**Test creating a student**:
+```bash
+# Create a student (POST request)
+kubectl exec -n student-api $API_POD -- sh -c 'curl -s -X POST http://localhost:3000/api/v1/students -H "Content-Type: application/json" -d "{\"name\":\"Test Student\",\"email\":\"test@example.com\",\"age\":20}"'
+
+# Get all students
+kubectl exec -n student-api $API_POD -- sh -c 'wget -qO- http://localhost:3000/api/v1/students 2>/dev/null || curl -s http://localhost:3000/api/v1/students'
+```
+
+### 6.6 Test Resource Usage
+
+```bash
+# Check resource usage (requires metrics-server)
+kubectl top pods -n student-api
+```
+
+**Expected Output** (if metrics-server is installed):
+```
+NAME                            CPU(cores)   MEMORY(bytes)
+student-crud-api-frontend-xxx   8m           45Mi/128Mi
+student-crud-api-api-xxx        50m          180Mi/512Mi
+student-crud-api-api-db-0       20m          120Mi/512Mi
+```
+
+**✅ All pods operating within resource limits**
+
+**If metrics-server is not installed**:
+```bash
+# Install metrics-server in Minikube
+minikube addons enable metrics-server
+
+# Wait a moment, then try again
+sleep 10
+kubectl top pods -n student-api
+```
+
+**Alternative: Check resource limits in pod spec**:
+```bash
+# Check resource limits configured
+kubectl get pod -n student-api $FRONTEND_POD -o jsonpath='{.spec.containers[0].resources}' | jq
+```
+
+### 6.7 Verify DNS Resolution
+
+```bash
+# Test DNS resolution from a pod
+kubectl run -it --rm debug --image=busybox --restart=Never -n student-api -- nslookup student-crud-api-api
+```
+
+**Expected Output**:
+```
+Server:    10.96.0.10
+Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
+
+Name:      student-crud-api-api
+Address 1: 10.244.x.x student-crud-api-api.student-api.svc.cluster.local
+```
+
+**✅ DNS resolution working correctly**
+
+**If DNS fails**:
+```bash
+# Check CoreDNS pods
+kubectl get pods -n kube-system -l k8s-app=kube-dns
+
+# Check CoreDNS logs
+kubectl logs -n kube-system -l k8s-app=kube-dns --tail=20
+```
+
+### 6.8 Test End-to-End (via Port-Forward)
+
+```bash
+# Port-forward to API service (run in background)
+kubectl port-forward svc/student-crud-api-api 3000:3000 -n student-api &
+PORT_FORWARD_PID=$!
+
+# Wait a moment for port-forward to establish
+sleep 2
+
+# Test health endpoint
+curl http://localhost:3000/api/v1/health
+
+# Create a student
+curl -X POST http://localhost:3000/api/v1/students \
+  -H "Content-Type: application/json" \
+  -d '{"name":"John Doe","email":"john@example.com","age":25}'
+
+# Get students
+curl http://localhost:3000/api/v1/students
+
+# Stop port-forward when done
+kill $PORT_FORWARD_PID 2>/dev/null || true
+```
+
+**Expected Output**:
+```json
+# Health check
+{"status":"healthy","timestamp":"2024-01-XX","uptime":600}
+
+# Create student
+{"id":1,"name":"John Doe","email":"john@example.com","age":25,...}
+
+# Get students
+[{"id":1,"name":"John Doe","email":"john@example.com","age":25,...}]
+```
+
+**✅ Full CRUD operations working end-to-end**
+
+**Alternative: Test via Ingress using minikube tunnel** (optional, if ingress is configured):
+```bash
+# Check ingress
+kubectl get ingress -n student-api
+
+# If ingress exists, start minikube tunnel in a separate terminal
+# This will expose ingress services on localhost (port 80)
+minikube tunnel
+
+# In another terminal, test via ingress using localhost with Host header
+# Get the ingress hostname and use it in Host header
+INGRESS_HOST=$(kubectl get ingress -n student-api -o jsonpath='{.items[0].spec.rules[0].host}')
+curl -H "Host: $INGRESS_HOST" http://localhost/api/v1/health
+
+# For frontend (if configured)
+curl -H "Host: $INGRESS_HOST" http://localhost/
+
+# Stop tunnel with Ctrl+C when done
+```
+
+**Note**: 
+- Using `kubectl port-forward` (as shown above) is simpler and recommended for this demo
+- `minikube tunnel` is only needed if you want to test ingress routing
+- All access uses `localhost` - no /etc/hosts modifications needed
+
+---
+
+## Step 7: View Monitoring Dashboards
+
+### 7.1 Access Grafana
+
+```bash
+# Port-forward Grafana service (run in background)
+kubectl port-forward svc/observability-grafana 3000:80 -n monitoring &
+GRAFANA_PID=$!
+
+# Wait a moment
+sleep 2
+
+# Get Grafana password
+GRAFANA_PASSWORD=$(kubectl get secret -n monitoring observability-grafana -o jsonpath='{.data.admin-password}' 2>/dev/null | base64 -d || echo "prom-operator")
+echo "Grafana password: $GRAFANA_PASSWORD"
+```
+
+**Access Grafana**: Open browser to http://localhost:3000
+
+**Default Credentials**:
+- Username: `admin`
+- Password: Check the output above or run:
+  ```bash
+  kubectl get secret -n monitoring observability-grafana -o jsonpath='{.data.admin-password}' | base64 -d
+  echo
+  ```
+
+**Note**: Keep the port-forward running. To stop it later: `kill $GRAFANA_PID`
+
+### 7.2 Import Dashboard
+
+1. Navigate to **Dashboards** → **Import**
+2. Upload the dashboard JSON file:
+   ```bash
+   # Copy dashboard JSON
+   cat deliverables/grafana-dashboards/dashboard.json
+   ```
+3. Paste the JSON content or upload the file
+4. Select **Prometheus** as data source
+5. Click **Import**
+
+### 7.3 View Dashboard Panels
+
+**Dashboard includes**:
+- **CPU Usage**: Real-time CPU usage per pod
+- **Memory Usage**: Memory usage in bytes and percentage
+- **Pod Restart Count**: Number of pod restarts over time
+- **Container Status**: Current status of containers
+
+**Screenshot Instructions**:
+1. Navigate to the dashboard in Grafana
+2. Take screenshots showing:
+   - Memory usage graphs (before/after fixes)
+   - Pod restart count (should show 0 after fixes)
+   - CPU usage trends
+   - All pods in healthy state
+
+**Example Screenshot Locations**:
+- `assets/memory_usage_alert.png` - Memory usage dashboard
+- `assets/cpu_usage_alert.png` - CPU usage dashboard
+- `assets/k8s_dashboards.png` - Kubernetes overview
+
+### 7.4 View Prometheus Metrics
+
+```bash
+# Port-forward Prometheus (run in background, or use separate terminal)
+kubectl port-forward svc/observability-kube-prometheus-stack-prometheus 9090:9090 -n monitoring &
+PROMETHEUS_PID=$!
+
+# Wait a moment
+sleep 2
+```
+
+**Access Prometheus**: Open browser to http://localhost:9090
+
+**Note**: Keep the port-forward running. To stop it later: `kill $PROMETHEUS_PID`
+
+**Test Queries**:
+```promql
+# Pod memory usage
+container_memory_working_set_bytes{pod=~"student-crud-api-.*"}
+
+# Pod restart count
+kube_pod_container_status_restarts_total{pod=~"student-crud-api-.*"}
+
+# Pod status
+kube_pod_status_phase{pod=~"student-crud-api-.*"}
+```
+
+---
+
+## Step 8: Test Alerts
+
+### 8.1 Apply Alert Rules
+
+```bash
+# Apply Prometheus alert rules
+kubectl apply -f deliverables/prometheus-alerts/student-api-alerts.yaml -n monitoring
+
+# Verify alerts are loaded
+kubectl get prometheusrule -n monitoring
+```
+
+**Expected Output**:
+```
+NAME                AGE
+student-api-alerts  10s
+```
+
+### 8.2 View Alerts in Prometheus
+
+```bash
+# Access Prometheus (if not already port-forwarded)
+# If you already have port-forward running, skip this
+kubectl port-forward svc/observability-kube-prometheus-stack-prometheus 9090:9090 -n monitoring &
+```
+
+1. Open browser to http://localhost:9090
+2. Navigate to **Alerts** tab in Prometheus UI
+3. Look for alerts with `app=student-api` label
+4. Verify alert rules are loaded
+
+**Verify alerts are loaded**:
+```bash
+# Check PrometheusRule resource
+kubectl get prometheusrule -n monitoring student-api-alerts -o yaml
+
+# Check if Prometheus has loaded the rules
+curl -s http://localhost:9090/api/v1/rules | jq '.data.groups[] | select(.name=="student-api-alerts")'
+```
+
+### 8.3 Trigger Test Alert (Optional)
+
+Use the test script to trigger a CrashLoopBackOff alert:
+
+```bash
+# Enable faulty config again
+cd deliverables/scripts
+./test-frontend-failure.sh enable
+
+# Wait for alert to trigger (check Prometheus UI)
+# Then fix it
+./test-frontend-failure.sh disable
+```
+
+### 8.4 View Alertmanager (Optional)
+
+```bash
+# Port-forward Alertmanager (run in background)
+kubectl port-forward svc/observability-kube-prometheus-stack-alertmanager 9093:9093 -n monitoring &
+ALERTMANAGER_PID=$!
+
+# Wait a moment
+sleep 2
+```
+
+**Access Alertmanager**: Open browser to http://localhost:9093
+
+**Note**: Keep the port-forward running. To stop it later: `kill $ALERTMANAGER_PID`
+
+**Check Alertmanager status**:
+```bash
+# Verify Alertmanager is running
+kubectl get pods -n monitoring -l app.kubernetes.io/name=alertmanager
+
+# Check Alertmanager logs
+kubectl logs -n monitoring -l app.kubernetes.io/name=alertmanager --tail=20
+```
+
+**Screenshot Instructions**:
+1. Navigate to Alertmanager UI
+2. Take screenshots of:
+   - Active alerts (if any)
+   - Alert groups
+   - Alert routing configuration
+
+**Example Screenshot Locations**:
+- `assets/alerts.png` - Alertmanager alerts view
+- `assets/http_error_alert.png` - HTTP error alert
+- `assets/p90_latency_alert.png` - Latency alert
+
+### 8.5 Alert Rules Overview
+
+**Configured Alerts** (in `deliverables/prometheus-alerts/student-api-alerts.yaml`):
+
+1. **PodCrashLoopBackOff** - Triggers when pod enters CrashLoopBackOff
+2. **HighPodMemoryUsage** - Triggers when memory > 85%
+3. **HighPodCPUUsage** - Triggers when CPU > 80%
+4. **HighPodRestartCount** - Triggers when restarts > 5 in 1 hour
+5. **ServiceEndpointsDown** - Triggers when service has no endpoints
+6. **HighHTTPErrorRate** - Triggers when error rate > 0.1 errors/sec
+7. **HighP90Latency** - Triggers when p90 latency > 1s
+8. **HighP95Latency** - Triggers when p95 latency > 2s
+9. **HighP99Latency** - Triggers when p99 latency > 5s
+10. **DatabaseErrors** - Triggers when DB error rate > 0.05 errors/sec
+
+---
+
+## Root Cause Summary
+
+### Issue 1: Pod CrashLoopBackOff ✅ FIXED
+
+**Root Cause**: 
+- Frontend container configured with incorrect API URL (`http://wrong-backend-url:3000/api/v1`)
+- `failOnApiUnreachable: true` caused container to exit when API was unreachable
+- Container kept restarting in a loop
+
+**Evidence**:
+- Pod logs showed: `API is NOT reachable at http://wrong-backend-url:3000/api/v1`
+- Container exit code: 1
+- Pod events showed: `Error: container exited with code 1`
+
+**Fix Applied**:
+- Set `apiUrl: ""` (empty, uses Kubernetes service DNS: `student-crud-api-api:3000`)
+- Set `checkApiConnectivity: false`
+- Set `failOnApiUnreachable: false`
+
+**Verification**:
+```bash
+kubectl get pods -n student-api
+# ✅ All pods Running, no CrashLoopBackOff
+```
+
+---
+
+### Issue 2: Service Discovery/DNS Issues ✅ FIXED
+
+**Root Cause**:
+- Frontend was configured to use non-existent hostname (`wrong-backend-url`)
+- Should use Kubernetes service DNS name: `student-crud-api-api.student-api.svc.cluster.local` or short form `student-crud-api-api:3000`
+
+**Evidence**:
+- ConfigMap showed incorrect `API_BASE_URL`
+- DNS resolution failed for `wrong-backend-url`
+- Service `student-crud-api-api` had valid endpoints
+
+**Fix Applied**:
+- Removed incorrect API URL
+- Frontend now uses correct Kubernetes service DNS (`student-crud-api-api:3000`)
+
+**Verification**:
+```bash
+kubectl exec -n student-api $FRONTEND_POD -- wget -qO- http://student-crud-api-api.student-api.svc.cluster.local:3000/api/v1/health
+# ✅ Returns healthy status
+```
+
+---
+
+### Issue 3: Resource Pressure (Memory) ✅ MITIGATED
+
+**Root Cause**:
+- Frontend pods had memory limits set (128Mi)
+- While not causing OOMKilled in this scenario, limits were set to prevent issues
+
+**Evidence**:
+- Resource limits configured in values.yaml
+- Memory usage monitored via `kubectl top pods`
+
+**Fix Applied**:
+- Resource limits already configured:
+  - Frontend: 128Mi limit, 64Mi request
+  - API: 512Mi limit, 256Mi request
+  - Database: 512Mi limit, 256Mi request
+
+**Verification**:
+```bash
+kubectl top pods -n student-api
+# ✅ All pods operating within limits
+```
+
+---
+
+### Issue 4: Networking Configuration ✅ VERIFIED
+
+**Root Cause**:
+- Network policies exist but are disabled by default (`networkPolicy.enabled: false`)
+- When enabled, DNS egress (UDP port 53) is properly allowed
+
+**Evidence**:
+- Network policy templates exist in `charts/crud-api/templates/network-policy.yaml`
+- DNS egress rules configured correctly
+
+**Status**:
+- Network policies properly configured but disabled
+- DNS resolution working correctly
+- Service-to-service communication working
+
+**Verification**:
+```bash
+kubectl get networkpolicies -n student-api
+# No policies (disabled by default)
+
+# Test DNS
+kubectl run -it --rm debug --image=busybox --restart=Never -n student-api -- nslookup student-crud-api-api
+# ✅ DNS resolution working
+```
+
+---
+
+## Configuration Changes
+
+### Summary of Changes
+
+#### Before (Faulty Configuration)
+
+**File**: `charts/crud-api/values.yaml`
+
+```yaml
+frontend:
+  apiUrl: "http://wrong-backend-url:3000/api/v1"  # ❌ Wrong URL
+  checkApiConnectivity: true                       # ❌ Enabled
+  failOnApiUnreachable: true                      # ❌ Causes CrashLoopBackOff
+```
+
+#### After (Fixed Configuration)
+
+**File**: `charts/crud-api/values.yaml`
+
+```yaml
+frontend:
+  apiUrl: ""                    # ✅ Empty = use Kubernetes service DNS (student-crud-api-api:3000)
+  checkApiConnectivity: false   # ✅ Disabled
+  failOnApiUnreachable: false  # ✅ Prevents CrashLoopBackOff
+```
+
+### Files Modified
+
+1. **`charts/crud-api/values.yaml`**
+   - Fixed frontend API URL configuration
+   - Disabled connectivity checks that cause crashes
+
+2. **`charts/crud-api/templates/frontend-deployment.yaml`**
+   - Uses ConfigMap for API URL configuration
+   - Resources configured (requests and limits)
+
+3. **`charts/crud-api/templates/api-deployment.yaml`**
+   - Health probes configured (liveness and readiness)
+   - Resources configured (requests and limits)
+
+4. **`charts/crud-api/templates/api-db-statefulset.yaml`**
+   - Health probes configured (liveness and readiness)
+   - Resources configured (requests and limits)
+
+### Files Created
+
+1. **`deliverables/prometheus-alerts/student-api-alerts.yaml`**
+   - Prometheus alert rules for all identified issues
+
+2. **`deliverables/grafana-dashboards/dashboard.json`**
+   - Grafana dashboard for monitoring
+
+3. **`deliverables/scripts/test-frontend-failure.sh`**
+   - Script to reproduce and fix CrashLoopBackOff scenario
+
+---
+
+## Quick Reference Commands
 
 ### Check Pod Status
 ```bash
-kubectl get pods -n student-api -o wide
-kubectl describe pod <pod-name> -n student-api
+kubectl get pods -n student-api
+kubectl get pods -n student-api -w  # Watch mode
 ```
 
 ### Check Service Endpoints
 ```bash
 kubectl get svc,endpoints -n student-api
-kubectl describe svc <service-name> -n student-api
+```
+
+### View Pod Logs
+```bash
+kubectl logs -n student-api <pod-name>
+kubectl logs -n student-api <pod-name> --previous  # Previous container
+```
+
+### Describe Pod
+```bash
+kubectl describe pod -n student-api <pod-name>
 ```
 
 ### Check Resource Usage
@@ -383,34 +1079,176 @@ kubectl top pods -n student-api
 kubectl top nodes
 ```
 
-### Check HPA Status
+### Test DNS Resolution
 ```bash
-kubectl get hpa -n student-api
-kubectl describe hpa <hpa-name> -n student-api
-```
-
-### Check Network Policies
-```bash
-kubectl get networkpolicies -n student-api
-kubectl describe networkpolicy <policy-name> -n student-api
-```
-
-### View Logs
-```bash
-kubectl logs <pod-name> -n student-api
-kubectl logs <pod-name> -n student-api --previous  # Previous container instance
-kubectl logs -f <pod-name> -n student-api  # Follow logs
+kubectl run -it --rm debug --image=busybox --restart=Never -n student-api -- nslookup student-crud-api-api
 ```
 
 ### Test Connectivity
 ```bash
-# From API pod to database
-kubectl exec -n student-api <api-pod> -- pg_isready -h student-crud-api-api-db -p 5432
-
-# Health check
-kubectl exec -n student-api <api-pod> -- wget -qO- http://localhost:3000/api/v1/health
-
-# Test API endpoint
-kubectl exec -n student-api <api-pod> -- wget -qO- http://localhost:3000/api/v1/students
+# From frontend pod to API
+kubectl exec -n student-api <frontend-pod> -- wget -qO- http://student-crud-api-api.student-api.svc.cluster.local:3000/api/v1/health
 ```
 
+### Access Services
+
+**Using kubectl port-forward** (recommended for simple service access):
+
+```bash
+# Grafana
+kubectl port-forward svc/observability-grafana 3000:80 -n monitoring
+
+# Prometheus
+kubectl port-forward svc/observability-kube-prometheus-stack-prometheus 9090:9090 -n monitoring
+
+# API
+kubectl port-forward svc/student-crud-api-api 3000:3000 -n student-api
+
+# Frontend
+kubectl port-forward svc/student-crud-api-frontend 8080:8080 -n student-api
+```
+
+**Using minikube tunnel** (optional, for ingress services only):
+
+```bash
+# Start minikube tunnel in a separate terminal (runs in foreground)
+minikube tunnel
+
+# This will expose ingress services on localhost (port 80)
+# Access services using localhost with Host header (no /etc/hosts needed)
+INGRESS_HOST=$(kubectl get ingress -n student-api -o jsonpath='{.items[0].spec.rules[0].host}')
+curl -H "Host: $INGRESS_HOST" http://localhost/api/v1/health
+
+# Stop tunnel with Ctrl+C when done
+```
+
+**Note**: 
+- **Recommended**: Use `kubectl port-forward` for direct service access (Grafana, Prometheus, API, Frontend)
+- **Optional**: Use `minikube tunnel` only if you want to test ingress routing
+- All access uses `localhost` - **no /etc/hosts modifications or root privileges needed**
+- For this demo, `kubectl port-forward` is sufficient for all testing
+
+### Test Failure Scenario
+```bash
+cd deliverables/scripts
+./test-frontend-failure.sh enable   # Trigger CrashLoopBackOff
+./test-frontend-failure.sh disable  # Fix the issue
+./test-frontend-failure.sh status   # Check current state
+```
+
+---
+
+## Screenshots Guide
+
+### Required Screenshots
+
+1. **Grafana Dashboard**:
+   - Memory usage graphs (before/after)
+   - Pod restart count (should be 0 after fixes)
+   - CPU usage trends
+   - All pods in healthy state
+
+2. **Prometheus Alerts**:
+   - Alert rules loaded
+   - Active alerts (if any)
+   - Alert history
+
+3. **Kubectl Outputs**:
+   - Pod status (before/after)
+   - Service endpoints
+   - Resource usage
+   - DNS resolution tests
+
+### Screenshot Locations
+
+Save screenshots in `assets/` directory:
+- `assets/pod_status_before.png` - Pods in CrashLoopBackOff
+- `assets/pod_status_after.png` - All pods Running
+- `assets/grafana_dashboard.png` - Grafana dashboard view
+- `assets/prometheus_alerts.png` - Prometheus alerts view
+- `assets/dns_resolution.png` - DNS resolution test output
+
+---
+
+## Troubleshooting
+
+### Pod Still in CrashLoopBackOff
+
+```bash
+# Check logs
+kubectl logs -n student-api <pod-name> --previous
+
+# Check ConfigMap
+kubectl get configmap -n student-api student-crud-api-frontend-config -o yaml
+
+# Restart deployment
+kubectl rollout restart deployment/student-crud-api-frontend -n student-api
+```
+
+### Service Has No Endpoints
+
+```bash
+# Check service selector
+kubectl describe service -n student-api student-crud-api-frontend
+
+# Check pod labels
+kubectl get pods -n student-api --show-labels
+
+# Verify labels match
+```
+
+### DNS Resolution Failing
+
+```bash
+# Check CoreDNS pods
+kubectl get pods -n kube-system -l k8s-app=kube-dns
+
+# Check CoreDNS logs
+kubectl logs -n kube-system <coredns-pod>
+```
+
+### Cannot Access Grafana
+
+```bash
+# Check Grafana pod status
+kubectl get pods -n monitoring -l app.kubernetes.io/name=grafana
+
+# Get Grafana password
+kubectl get secret -n monitoring observability-grafana -o jsonpath='{.data.admin-password}' | base64 -d
+```
+
+---
+
+## Conclusion
+
+This guide demonstrated:
+
+1. ✅ **Reproducing the Issue**: Using `test-frontend-failure.sh` to trigger CrashLoopBackOff
+2. ✅ **Diagnosing the Problem**: Using kubectl commands to identify root causes
+3. ✅ **Applying Fixes**: Correcting configuration to resolve issues
+4. ✅ **Verifying Solutions**: Comprehensive verification steps
+5. ✅ **Monitoring Setup**: Grafana dashboards and Prometheus alerts
+6. ✅ **Testing Alerts**: Alert rules for proactive monitoring
+
+**All issues have been identified, diagnosed, and resolved.**
+
+The application is now healthy with:
+- All pods running and ready
+- Services with active endpoints
+- DNS resolution working
+- Resource usage within limits
+- Monitoring and alerting configured
+
+---
+
+**Next Steps**:
+1. Review Grafana dashboards regularly
+2. Monitor Prometheus alerts
+3. Test failure scenarios periodically
+4. Adjust resource limits based on actual usage
+5. Enable network policies when ready for production
+
+---
+
+**Report Generated**: 2024  
+**Status**: ✅ Complete - Ready for Evaluation

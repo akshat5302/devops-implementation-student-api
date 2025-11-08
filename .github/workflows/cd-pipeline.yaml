@@ -1,0 +1,99 @@
+name: Continuous Deployment Pipeline
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'src/**'
+      - 'charts/crud-api/**'
+    branches:
+      - sre-implementation
+      - main
+
+env:
+  IMAGE_NAME: student-crud-api
+  HELM_VALUES_PATH: charts/crud-api/values.yaml
+
+jobs:
+  build-and-push:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Generate Tag
+        id: tag
+        run: |
+          # Generate tag using timestamp and short commit SHA
+          TAG=$(date +'%Y%m%d')-$(git rev-parse --short HEAD)
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "Built image tag: ${TAG}"
+      
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+      
+      - name: Build and Push Image to Docker Hub
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            akshat5302/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
+            akshat5302/${{ env.IMAGE_NAME }}:latest
+          cache-from: type=registry,ref=akshat5302/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=akshat5302/${{ env.IMAGE_NAME }}:buildcache,mode=max
+
+  update-helm-values:
+    needs: build-and-push
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.TOKEN_GITHUB }}
+      
+      - name: Update Application Image Tag
+        run: |
+          TAG=${{ needs.build-and-push.outputs.tag }}
+          if command -v yq &> /dev/null; then
+            yq e -i ".api.image.repository = \"akshat5302/${{ env.IMAGE_NAME }}\"" ${{ env.HELM_VALUES_PATH }}
+            yq e -i ".api.image.tag = \"${TAG}\"" ${{ env.HELM_VALUES_PATH }}
+          else
+            # Fallback to sed if yq is not available
+            sed -i.bak "s|repository:.*|repository: akshat5302/${{ env.IMAGE_NAME }}|" ${{ env.HELM_VALUES_PATH }}
+            sed -i.bak "s|tag:.*|tag: ${TAG}|" ${{ env.HELM_VALUES_PATH }}
+          fi
+          echo "Updated image tag to: ${TAG}"
+          cat ${{ env.HELM_VALUES_PATH }} | grep -A 2 "image:"
+      
+      - name: Configure Git
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+      
+      - name: Commit and Push Changes
+        run: |
+          git add ${{ env.HELM_VALUES_PATH }}
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: update application image tag to ${{ needs.build-and-push.outputs.tag }} [skip ci]"
+            git push origin ${{ github.ref_name }}
+            echo "Pushed image tag update to trigger ArgoCD sync"
+          fi
+
+  notify-argocd:
+    needs: update-helm-values
+    runs-on: self-hosted
+    if: success()
+    steps:
+      - name: Notify ArgoCD (Optional)
+        run: |
+          echo "ArgoCD will automatically detect the Git change and sync the application"
+          echo "Image tag: ${{ needs.build-and-push.outputs.tag }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo ""
+          echo "To manually trigger sync:"
+          echo "  kubectl patch application student-crud-api -n argocd --type merge -p '{\"operation\":{\"initiatedBy\":{\"username\":\"github-actions\"},\"sync\":{\"revision\":\"${{ github.sha }}\"}}}'"
+

@@ -99,7 +99,9 @@ kube-prometheus-stack:
   enabled: true
   alertmanager:
     enabled: true
+    slackWebhookUrl: '' # Set via environment variable or secret - do not commit actual webhook URLs
     alertmanagerSpec:
+      externalUrl: http://localhost:9093
       nodeSelector:
         type: dependent_services
       tolerations:
@@ -107,6 +109,7 @@ kube-prometheus-stack:
         operator: "Equal"
         value: "dependent_services"
         effect: "NoSchedule"
+      configSecret: alertmanager-config
 
   grafana:
     enabled: true
@@ -166,7 +169,7 @@ kube-prometheus-stack:
         - source_labels: [ __address__ ]
           target_label: instance
         - target_label: application
-          replacement: 'student-crud-api-api'
+          replacement: 'student-api'
 
 prometheus-blackbox-exporter:
   enabled: true

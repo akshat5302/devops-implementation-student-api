@@ -22,6 +22,7 @@ metadata:
   namespace: {{ .Release.Namespace }}
   name: {{ .Release.Name }}-frontend-config
 data:
+  # API Configuration
   {{- if .Values.frontend.apiUrl }}
   API_BASE_URL: {{ .Values.frontend.apiUrl | quote }}
   {{- else if .Values.ingress.api }}
@@ -29,6 +30,17 @@ data:
   {{- else }}
   API_BASE_URL: http://{{ .Release.Name }}-api:3000/api/v1
   {{- end }}
+
+  {{- if .Values.frontend.checkApiConnectivity }}
+  CHECK_API_CONNECTIVITY: "true"
+  {{- else }}
+  CHECK_API_CONNECTIVITY: "false"
+  {{- end }}
+
+  FAIL_ON_API_UNREACHABLE: {{ .Values.frontend.failOnApiUnreachable | default "false" | quote }}
+  API_CHECK_RETRIES: {{ .Values.frontend.apiCheckRetries | default "3" | quote }}
+  API_CHECK_DELAY: {{ .Values.frontend.apiCheckDelay | default "2" | quote }}
+
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -65,12 +77,9 @@ spec:
         - name: http
           containerPort: 8080
           protocol: TCP
-        env:
-        - name: API_BASE_URL
-          valueFrom:
-            configMapKeyRef:
-              name: {{ .Release.Name }}-frontend-config
-              key: API_BASE_URL
+        envFrom:
+        - configMapRef:
+            name: {{ .Release.Name }}-frontend-config
         resources:
           {{- toYaml .Values.frontend.resources | nindent 10 }}
       {{- if .Values.frontend.serviceAccount }}

@@ -1,0 +1,70 @@
+{{- if index .Values "kube-prometheus-stack" "alertmanager" "slackWebhookUrl" }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: alertmanager-config
+  namespace: {{ .Release.Namespace }}
+type: Opaque
+stringData:
+  alertmanager.yaml: |
+    global:
+      resolve_timeout: 5m
+    inhibit_rules:
+    - equal:
+      - namespace
+      - alertname
+      source_matchers:
+      - severity = critical
+      target_matchers:
+      - severity =~ warning|info
+    - equal:
+      - namespace
+      - alertname
+      source_matchers:
+      - severity = warning
+      target_matchers:
+      - severity = info
+    route:
+      group_by: ['namespace', 'alertname', 'severity']
+      group_wait: 30s
+      group_interval: 30m
+      repeat_interval: 24h
+      receiver: 'null'
+      routes:
+      - match:
+          alertname: Watchdog
+        receiver: 'null'
+        continue: false
+      # Only send student-api alerts to Slack - must come before K8s filter
+      - match:
+          app: student-api
+        receiver: 'slack-notifications'
+        continue: false
+      # Route all K8s system alerts to null to avoid rate limiting
+      - match_re:
+          alertname: '.*(Kube|Kubernetes|Node|Pod|Container|Volume|PersistentVolume|StorageClass|Ingress|Service|Endpoint|Network|Cluster|TargetDown|Prometheus|Alertmanager).*'
+        receiver: 'null'
+        continue: false
+    receivers:
+    - name: 'null'
+    - name: 'slack-notifications'
+      slack_configs:
+      - api_url: '{{ index .Values "kube-prometheus-stack" "alertmanager" "slackWebhookUrl" }}'
+        channel: '#devops-monitoring-alerts'
+        title: '🚨 Alert: {{`{{`}} .GroupLabels.alertname {{`}}`}}'
+        text: |-
+          {{`{{`}} range .Alerts {{`}}`}}
+          *Alert:* {{`{{`}} .Annotations.summary {{`}}`}}
+          *Description:* {{`{{`}} .Annotations.description {{`}}`}}
+          *Severity:* {{`{{`}} .Labels.severity {{`}}`}}
+          *Component:* {{`{{`}} .Labels.component {{`}}`}}
+          *Status:* {{`{{`}} .Status {{`}}`}}
+          *Pod:* {{`{{`}} .Labels.pod {{`}}`}}
+          *Namespace:* {{`{{`}} .Labels.namespace {{`}}`}}
+          *Dashboard:* <http://localhost:3000/d/student-api-resources-logs?var-namespace={{`{{`}} .Labels.namespace {{`}}`}}&var-pod={{`{{`}} .Labels.pod {{`}}`}}|View Dashboard>
+          {{`{{`}} end {{`}}`}}
+        send_resolved: true
+        http_config:
+          follow_redirects: true
+{{- end }}
+

@@ -1,0 +1,308 @@
+{
+  "dashboard": {
+    "title": "Student API - Resources & Logs",
+    "tags": ["student-api", "resources", "cpu", "memory", "logs"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "30s",
+    "editable": true,
+    "gnetId": null,
+    "graphTooltip": 1,
+    "links": [],
+    "templating": {
+      "list": [
+        {
+          "name": "namespace",
+          "type": "query",
+          "label": "Namespace",
+          "datasource": "Prometheus",
+          "query": "label_values(kube_pod_info, namespace)",
+          "current": {
+            "text": "student-api",
+            "value": "student-api"
+          },
+          "options": [],
+          "refresh": 1,
+          "regex": "",
+          "sort": 0,
+          "multi": false,
+          "includeAll": false,
+          "allValue": null
+        },
+        {
+          "name": "pod",
+          "type": "query",
+          "label": "Pod",
+          "datasource": "Prometheus",
+          "query": "label_values(container_cpu_usage_seconds_total{namespace=\"$namespace\",pod=~\"student-crud-api-.*\"}, pod)",
+          "current": {
+            "text": "All",
+            "value": "$__all"
+          },
+          "options": [],
+          "refresh": 1,
+          "regex": "",
+          "sort": 0,
+          "multi": true,
+          "includeAll": true,
+          "allValue": null
+        }
+      ]
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "CPU Usage (Cores)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"$namespace\",pod=~\"student-crud-api-.*\",container!=\"POD\",container!=\"\"}[5m])) by (pod)",
+            "legendFormat": "{{pod}}",
+            "refId": "A",
+            "datasource": "Prometheus"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "CPU Cores", "min": 0},
+          {"format": "short"}
+        ],
+        "xaxis": {"mode": "time", "show": true},
+        "legend": {"show": true, "values": false, "min": false, "max": false, "current": false, "total": false, "avg": false}
+      },
+      {
+        "id": 2,
+        "title": "Memory Usage (Bytes)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "targets": [
+          {
+            "expr": "sum(container_memory_working_set_bytes{namespace=\"$namespace\",pod=~\"student-crud-api-.*\",container!=\"POD\",container!=\"\"}) by (pod)",
+            "legendFormat": "{{pod}}",
+            "refId": "A",
+            "datasource": "Prometheus"
+          }
+        ],
+        "yaxes": [
+          {"format": "bytes", "label": "Memory", "min": 0},
+          {"format": "short"}
+        ],
+        "xaxis": {"mode": "time", "show": true},
+        "legend": {"show": true, "values": false, "min": false, "max": false, "current": false, "total": false, "avg": false}
+      },
+      {
+        "id": 3,
+        "title": "CPU Usage %",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "(sum(rate(container_cpu_usage_seconds_total{namespace=\"$namespace\",pod=~\"student-crud-api-.*\",container!=\"POD\",container!=\"\"}[5m])) by (pod) / sum(container_spec_cpu_quota{namespace=\"$namespace\",pod=~\"student-crud-api-.*\",container!=\"POD\",container!=\"\"}) by (pod) / sum(container_spec_cpu_period{namespace=\"$namespace\",pod=~\"student-crud-api-.*\",container!=\"POD\",container!=\"\"}) by (pod)) * 100",
+            "legendFormat": "{{pod}}",
+            "refId": "A",
+            "datasource": "Prometheus"
+          }
+        ],
+        "yaxes": [
+          {"format": "percent", "label": "CPU %", "min": 0, "max": 100},
+          {"format": "short"}
+        ],
+        "xaxis": {"mode": "time", "show": true},
+        "legend": {"show": true, "values": false, "min": false, "max": false, "current": false, "total": false, "avg": false},
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {"params": [80], "type": "gt"},
+              "operator": {"type": "and"},
+              "query": {"params": ["A", "5m", "now"]},
+              "reducer": {"type": "avg"},
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "for": "5m",
+          "frequency": "10s",
+          "handler": 1,
+          "name": "High CPU Usage",
+          "noDataState": "no_data",
+          "notifications": []
+        }
+      },
+      {
+        "id": 4,
+        "title": "Memory Usage %",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "targets": [
+          {
+            "expr": "(sum(container_memory_working_set_bytes{namespace=\"$namespace\",pod=~\"student-crud-api-.*\",container!=\"POD\",container!=\"\"}) by (pod) / sum(container_spec_memory_limit_bytes{namespace=\"$namespace\",pod=~\"student-crud-api-.*\",container!=\"POD\",container!=\"\"}) by (pod)) * 100",
+            "legendFormat": "{{pod}}",
+            "refId": "A",
+            "datasource": "Prometheus"
+          }
+        ],
+        "yaxes": [
+          {"format": "percent", "label": "Memory %", "min": 0, "max": 100},
+          {"format": "short"}
+        ],
+        "xaxis": {"mode": "time", "show": true},
+        "legend": {"show": true, "values": false, "min": false, "max": false, "current": false, "total": false, "avg": false},
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {"params": [85], "type": "gt"},
+              "operator": {"type": "and"},
+              "query": {"params": ["A", "5m", "now"]},
+              "reducer": {"type": "avg"},
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "for": "5m",
+          "frequency": "10s",
+          "handler": 1,
+          "name": "High Memory Usage",
+          "noDataState": "no_data",
+          "notifications": []
+        }
+      },
+      {
+        "id": 5,
+        "title": "Pod Restart Count (Last Hour)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+        "targets": [
+          {
+            "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"$namespace\",pod=~\"student-crud-api-.*\"}[1h])) by (pod)",
+            "legendFormat": "{{pod}}",
+            "refId": "A",
+            "datasource": "Prometheus"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Restarts", "min": 0},
+          {"format": "short"}
+        ],
+        "xaxis": {"mode": "time", "show": true},
+        "legend": {"show": true, "values": false, "min": false, "max": false, "current": false, "total": false, "avg": false}
+      },
+      {
+        "id": 6,
+        "title": "Current Resource Usage",
+        "type": "stat",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+        "targets": [
+          {
+            "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"$namespace\",pod=~\"student-crud-api-.*\",container!=\"POD\",container!=\"\"}[5m])) by (pod)",
+            "legendFormat": "CPU: {{pod}}",
+            "refId": "A",
+            "datasource": "Prometheus"
+          },
+          {
+            "expr": "sum(container_memory_working_set_bytes{namespace=\"$namespace\",pod=~\"student-crud-api-.*\",container!=\"POD\",container!=\"\"}) by (pod)",
+            "legendFormat": "Memory: {{pod}}",
+            "refId": "B",
+            "datasource": "Prometheus"
+          }
+        ],
+        "options": {
+          "graphMode": "none",
+          "colorMode": "value",
+          "justifyMode": "auto"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": null, "color": "green"},
+                {"value": 80, "color": "yellow"},
+                {"value": 90, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 7,
+        "title": "Application Logs",
+        "type": "logs",
+        "gridPos": {"h": 12, "w": 24, "x": 0, "y": 24},
+        "targets": [
+          {
+            "expr": "{namespace=\"$namespace\",app=~\"student-crud-api.*\"}",
+            "refId": "A",
+            "datasource": "Loki"
+          }
+        ],
+        "options": {
+          "dedupStrategy": "none",
+          "enableLogDetails": true,
+          "prettifyLogMessage": false,
+          "showCommonLabels": false,
+          "showLabels": false,
+          "showTime": true,
+          "sortOrder": "Descending",
+          "wrapLogMessage": false
+        }
+      },
+      {
+        "id": 8,
+        "title": "Error Logs",
+        "type": "logs",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 36},
+        "targets": [
+          {
+            "expr": "{namespace=\"$namespace\",app=~\"student-crud-api.*\"} |= \"error\" | |= \"Error\" | |= \"ERROR\" | |= \"failed\" | |= \"Failed\" | |= \"exception\" | |= \"Exception\"",
+            "refId": "A",
+            "datasource": "Loki"
+          }
+        ],
+        "options": {
+          "dedupStrategy": "none",
+          "enableLogDetails": true,
+          "prettifyLogMessage": false,
+          "showCommonLabels": false,
+          "showLabels": false,
+          "showTime": true,
+          "sortOrder": "Descending",
+          "wrapLogMessage": false
+        }
+      },
+      {
+        "id": 9,
+        "title": "Log Volume by Pod",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 36},
+        "targets": [
+          {
+            "expr": "sum(count_over_time({namespace=\"$namespace\",app=~\"student-crud-api.*\"}[1m])) by (pod)",
+            "legendFormat": "{{pod}}",
+            "refId": "A",
+            "datasource": "Loki"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Log Lines/min", "min": 0},
+          {"format": "short"}
+        ],
+        "xaxis": {"mode": "time", "show": true},
+        "legend": {"show": true, "values": false, "min": false, "max": false, "current": false, "total": false, "avg": false}
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "timepicker": {
+      "refresh_intervals": ["10s", "30s", "1m", "5m", "15m", "30m", "1h", "2h", "1d"]
+    },
+    "uid": "student-api-resources-logs",
+    "annotations": {
+      "list": []
+    }
+  }
+}
+

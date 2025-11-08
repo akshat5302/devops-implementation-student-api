@@ -36,6 +36,7 @@ app.get('/', (req, res, next) => {
 
 app.use('/api/v1/health', require('./api/v1/routes/healthroute'));
 app.use('/api/v1/students', require('./api/v1/routes/studentsroute'));
+app.use('/api/v1/test', require('./api/v1/routes/testroute'));
 app.use('/metrics', metricsRoutes);
 
 app.use((error, req, res, next) => {
