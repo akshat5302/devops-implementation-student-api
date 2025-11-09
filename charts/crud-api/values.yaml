@@ -4,9 +4,9 @@ dockerRegistry:
   loginid: akshat5302
   password: ''
 ingress:
-  enabled: true
-  appHost: "student.atlan.com" # Frontend hostname
-  api: "student-api.atlan.com" # API hostname
+  enabled: false
+  appHost: "" # Frontend hostname
+  api: "" # API hostname
   ingressClass: nginx
   clientMaxBodySize: 5m
 

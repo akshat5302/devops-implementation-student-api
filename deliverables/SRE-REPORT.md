@@ -499,6 +499,9 @@ fi
 
 echo "Testing health endpoint on pod: $API_POD"
 
+# Install wget and curl if not available (Alpine-based images)
+kubectl exec -n student-api $API_POD -- sh -c 'apk add --no-cache wget curl 2>/dev/null || true'
+
 # Test health endpoint (try wget first, fallback to curl)
 kubectl exec -n student-api $API_POD -- sh -c 'wget -qO- http://localhost:3000/api/v1/health 2>/dev/null || curl -s http://localhost:3000/api/v1/health'
 ```
@@ -524,6 +527,9 @@ fi
 
 echo "Testing connectivity from frontend pod: $FRONTEND_POD"
 
+# Install wget and curl if not available (Alpine-based images)
+kubectl exec -n student-api $FRONTEND_POD -- sh -c 'apk add --no-cache wget curl 2>/dev/null || true'
+
 # Test connectivity from frontend to backend (try wget first, fallback to curl)
 kubectl exec -n student-api $FRONTEND_POD -- sh -c 'wget -qO- http://student-crud-api-api.student-api.svc.cluster.local:3000/api/v1/health 2>/dev/null || curl -s http://student-crud-api-api.student-api.svc.cluster.local:3000/api/v1/health'
 ```
@@ -547,6 +553,9 @@ kubectl run -it --rm debug --image=busybox --restart=Never -n student-api -- nsl
 ### 6.5 Test API Functionality
 
 ```bash
+# Install wget and curl if not available (Alpine-based images)
+kubectl exec -n student-api $API_POD -- sh -c 'apk add --no-cache wget curl 2>/dev/null || true'
+
 # Test GET students endpoint (try wget first, fallback to curl)
 kubectl exec -n student-api $API_POD -- sh -c 'wget -qO- http://localhost:3000/api/v1/students 2>/dev/null || curl -s http://localhost:3000/api/v1/students'
 ```
@@ -560,6 +569,9 @@ kubectl exec -n student-api $API_POD -- sh -c 'wget -qO- http://localhost:3000/a
 
 **Test creating a student**:
 ```bash
+# Install wget and curl if not available (Alpine-based images)
+kubectl exec -n student-api $API_POD -- sh -c 'apk add --no-cache wget curl 2>/dev/null || true'
+
 # Create a student (POST request)
 kubectl exec -n student-api $API_POD -- sh -c 'curl -s -X POST http://localhost:3000/api/v1/students -H "Content-Type: application/json" -d "{\"name\":\"Test Student\",\"email\":\"test@example.com\",\"age\":20}"'
 
@@ -666,29 +678,12 @@ kill $PORT_FORWARD_PID 2>/dev/null || true
 
 **✅ Full CRUD operations working end-to-end**
 
-**Alternative: Test via Ingress using minikube tunnel** (optional, if ingress is configured):
-```bash
-# Check ingress
-kubectl get ingress -n student-api
-
-# If ingress exists, start minikube tunnel in a separate terminal
-# This will expose ingress services on localhost (port 80)
-minikube tunnel
-
-# In another terminal, test via ingress using localhost with Host header
-# Get the ingress hostname and use it in Host header
-INGRESS_HOST=$(kubectl get ingress -n student-api -o jsonpath='{.items[0].spec.rules[0].host}')
-curl -H "Host: $INGRESS_HOST" http://localhost/api/v1/health
-
-# For frontend (if configured)
-curl -H "Host: $INGRESS_HOST" http://localhost/
-
-# Stop tunnel with Ctrl+C when done
-```
-
 **Note**: 
-- Using `kubectl port-forward` (as shown above) is simpler and recommended for this demo
-- `minikube tunnel` is only needed if you want to test ingress routing
+- Using `kubectl port-forward` (as shown above) is the recommended approach for this demo
+- If you have a domain name configured, you can use Ingress instead by:
+  1. Setting `ingress.enabled: true` in `charts/crud-api/values.yaml`
+  2. Configuring `ingress.appHost` and `ingress.api` with your domain names
+  3. Using `minikube tunnel` or an ingress controller to expose services
 - All access uses `localhost` - no /etc/hosts modifications needed
 
 ---
@@ -742,18 +737,11 @@ echo "Grafana password: $GRAFANA_PASSWORD"
 - **Pod Restart Count**: Number of pod restarts over time
 - **Container Status**: Current status of containers
 
-**Screenshot Instructions**:
-1. Navigate to the dashboard in Grafana
-2. Take screenshots showing:
-   - Memory usage graphs (before/after fixes)
-   - Pod restart count (should show 0 after fixes)
-   - CPU usage trends
-   - All pods in healthy state
-
-**Example Screenshot Locations**:
-- `assets/memory_usage_alert.png` - Memory usage dashboard
-- `assets/cpu_usage_alert.png` - CPU usage dashboard
-- `assets/k8s_dashboards.png` - Kubernetes overview
+**Dashboard Panels to Review**:
+- Memory usage graphs (before/after fixes)
+- Pod restart count (should show 0 after fixes)
+- CPU usage trends
+- All pods in healthy state
 
 ### 7.4 View Prometheus Metrics
 
@@ -862,17 +850,10 @@ kubectl get pods -n monitoring -l app.kubernetes.io/name=alertmanager
 kubectl logs -n monitoring -l app.kubernetes.io/name=alertmanager --tail=20
 ```
 
-**Screenshot Instructions**:
-1. Navigate to Alertmanager UI
-2. Take screenshots of:
-   - Active alerts (if any)
-   - Alert groups
-   - Alert routing configuration
-
-**Example Screenshot Locations**:
-- `assets/alerts.png` - Alertmanager alerts view
-- `assets/http_error_alert.png` - HTTP error alert
-- `assets/p90_latency_alert.png` - Latency alert
+**Alertmanager UI to Review**:
+- Active alerts (if any)
+- Alert groups
+- Alert routing configuration
 
 ### 8.5 Alert Rules Overview
 
@@ -935,60 +916,244 @@ kubectl get pods -n student-api
 
 **Verification**:
 ```bash
-kubectl exec -n student-api $FRONTEND_POD -- wget -qO- http://student-crud-api-api.student-api.svc.cluster.local:3000/api/v1/health
+# Install wget and curl if not available (Alpine-based images)
+kubectl exec -n student-api $FRONTEND_POD -- sh -c 'apk add --no-cache wget curl 2>/dev/null || true'
+
+kubectl exec -n student-api $FRONTEND_POD -- sh -c 'wget -qO- http://student-crud-api-api.student-api.svc.cluster.local:3000/api/v1/health 2>/dev/null || curl -s http://student-crud-api-api.student-api.svc.cluster.local:3000/api/v1/health'
 # ✅ Returns healthy status
 ```
 
 ---
 
-### Issue 3: Resource Pressure (Memory) ✅ MITIGATED
+### Issue 3: Out of Memory (OOM) Situation ✅ DEMONSTRATED & FIXED
 
 **Root Cause**:
-- Frontend pods had memory limits set (128Mi)
-- While not causing OOMKilled in this scenario, limits were set to prevent issues
+- Pods can exceed memory limits, causing OOMKilled status
+- Memory limits are set but can be exceeded under load or memory leaks
 
-**Evidence**:
-- Resource limits configured in values.yaml
-- Memory usage monitored via `kubectl top pods`
+**Demonstration - Trigger OOM**:
+
+1. **Check current memory limits**:
+```bash
+# Check API pod memory limits
+API_POD=$(kubectl get pods -n student-api -l app=student-crud-api-api -o jsonpath='{.items[0].metadata.name}')
+kubectl get pod -n student-api $API_POD -o jsonpath='{.spec.containers[0].resources}' | jq
+# Should show: memory limit: 512Mi
+```
+
+2. **Trigger OOM using test endpoint**:
+```bash
+# Port-forward to API service
+kubectl port-forward svc/student-crud-api-api 3000:3000 -n student-api &
+PORT_FORWARD_PID=$!
+
+# Wait a moment
+sleep 2
+
+# Trigger OOM by allocating memory beyond the limit
+curl "http://localhost:3000/api/v1/test/trigger-alerts?alertType=oom"
+
+# Stop port-forward
+kill $PORT_FORWARD_PID 2>/dev/null || true
+```
+
+3. **Observe OOMKilled status**:
+```bash
+# Watch pod status
+kubectl get pods -n student-api -w
+```
+
+**Expected Output** (after OOM trigger):
+```
+NAME                                    READY   STATUS      RESTARTS   AGE
+student-crud-api-api-xxx                0/1     OOMKilled   1          5m
+```
+
+4. **Check pod events**:
+```bash
+kubectl describe pod -n student-api $API_POD | grep -A 10 Events
+```
+
+**Expected Events**:
+```
+Events:
+  Type     Reason     Age                From               Message
+  ----     ------     ----               ----               -------
+  Warning  OOMKilled  30s (x1 over 1m)   kubelet            Container killed due to memory limit
+```
+
+5. **Check pod logs** (if available before OOM):
+```bash
+kubectl logs -n student-api $API_POD --previous
+```
 
 **Fix Applied**:
-- Resource limits already configured:
-  - Frontend: 128Mi limit, 64Mi request
-  - API: 512Mi limit, 256Mi request
-  - Database: 512Mi limit, 256Mi request
+- Increase memory limits in `charts/crud-api/values.yaml`:
+```yaml
+api:
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "200m"
+    limits:
+      memory: "1024Mi"  # Increased from 512Mi to 1024Mi
+      cpu: "500m"
+```
+
+- Apply the fix:
+```bash
+# Edit values.yaml to increase memory limit
+vim charts/crud-api/values.yaml
+
+# Upgrade the release
+helm upgrade student-crud-api ./charts/crud-api -n student-api --wait
+```
 
 **Verification**:
 ```bash
+# Check new memory limits
+kubectl get pod -n student-api $API_POD -o jsonpath='{.spec.containers[0].resources}' | jq
+
+# Check pod status (should be Running)
+kubectl get pods -n student-api
+# ✅ Pod should be Running, not OOMKilled
+
+# Monitor memory usage
 kubectl top pods -n student-api
-# ✅ All pods operating within limits
+# ✅ Pod operating within new limits
 ```
 
 ---
 
-### Issue 4: Networking Configuration ✅ VERIFIED
+### Issue 4: Network Policy Blocking API and DB Connection ✅ DEMONSTRATED
 
 **Root Cause**:
-- Network policies exist but are disabled by default (`networkPolicy.enabled: false`)
-- When enabled, DNS egress (UDP port 53) is properly allowed
+- Network policies can block pod-to-pod communication if not configured correctly
+- Default deny-all policy blocks all traffic unless explicitly allowed
 
-**Evidence**:
-- Network policy templates exist in `charts/crud-api/templates/network-policy.yaml`
-- DNS egress rules configured correctly
+**Demonstration - Block API and DB Connection**:
 
-**Status**:
-- Network policies properly configured but disabled
-- DNS resolution working correctly
-- Service-to-service communication working
+1. **Verify current connectivity** (before network policy):
+```bash
+# Get API pod name
+API_POD=$(kubectl get pods -n student-api -l app=student-crud-api-api -o jsonpath='{.items[0].metadata.name}')
+
+# Install wget and curl if not available
+kubectl exec -n student-api $API_POD -- sh -c 'apk add --no-cache wget curl 2>/dev/null || true'
+
+# Test API can reach database (should work)
+kubectl exec -n student-api $API_POD -- sh -c 'wget -qO- http://localhost:3000/api/v1/health 2>/dev/null || curl -s http://localhost:3000/api/v1/health'
+# ✅ Should return healthy status
+```
+
+2. **Apply blocking network policy**:
+```bash
+# Apply the blocking network policy from the demo file
+kubectl apply -f deliverables/network-policy-demo/block-api-db.yaml
+
+# Or create it manually:
+cat <<EOF | kubectl apply -f -
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: block-api-db-connection
+  namespace: student-api
+spec:
+  podSelector:
+    matchLabels:
+      app: student-crud-api-api
+  policyTypes:
+  - Egress
+  egress:
+  # Only allow DNS, but NOT database connection
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: UDP
+      port: 53
+  # Explicitly deny database connection (no rule for port 5432)
+EOF
+```
+
+3. **Observe connection failure**:
+```bash
+# Wait a moment for policy to take effect
+sleep 5
+
+# Test API health endpoint (should fail or timeout)
+kubectl exec -n student-api $API_POD -- sh -c 'wget -qO- http://localhost:3000/api/v1/health 2>/dev/null || curl -s http://localhost:3000/api/v1/health'
+# ❌ Should fail or timeout (API cannot reach database)
+
+# Check pod logs for connection errors
+kubectl logs -n student-api $API_POD --tail=20
+# Should show database connection errors
+```
+
+4. **Check network policy**:
+```bash
+kubectl get networkpolicies -n student-api
+kubectl describe networkpolicy -n student-api block-api-db-connection
+```
+
+**Fix Applied**:
+- Remove the blocking network policy or apply the allowing policy:
+```bash
+# Option 1: Delete the blocking policy
+kubectl delete networkpolicy -n student-api block-api-db-connection
+
+# Option 2: Apply the allowing policy from the demo file
+# The allow-api-db-connection policy is in deliverables/network-policy-demo/block-api-db.yaml
+# First delete the blocking one, then apply the allowing one:
+kubectl delete networkpolicy -n student-api block-api-db-connection
+kubectl apply -f deliverables/network-policy-demo/block-api-db.yaml
+# This will create the allow-api-db-connection policy
+
+# Or create it manually:
+cat <<EOF | kubectl apply -f -
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-db-connection
+  namespace: student-api
+spec:
+  podSelector:
+    matchLabels:
+      app: student-crud-api-api
+  policyTypes:
+  - Egress
+  egress:
+  # Allow DNS
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: UDP
+      port: 53
+  # Allow database connection
+  - to:
+    - podSelector:
+        matchLabels:
+          app.name: student-api-student-crud-api-api-db
+    ports:
+    - protocol: TCP
+      port: 5432
+EOF
+```
 
 **Verification**:
 ```bash
-kubectl get networkpolicies -n student-api
-# No policies (disabled by default)
+# Wait for policy to take effect
+sleep 5
 
-# Test DNS
-kubectl run -it --rm debug --image=busybox --restart=Never -n student-api -- nslookup student-crud-api-api
-# ✅ DNS resolution working
+# Test API health endpoint (should work now)
+kubectl exec -n student-api $API_POD -- sh -c 'wget -qO- http://localhost:3000/api/v1/health 2>/dev/null || curl -s http://localhost:3000/api/v1/health'
+# ✅ Should return healthy status
+
+# Check network policies
+kubectl get networkpolicies -n student-api
+# ✅ Policy should allow DB connection
 ```
+
+**Note**: The existing network policy template in `charts/crud-api/templates/network-policy.yaml` is properly configured to allow API-to-DB connections when enabled. This demonstration shows what happens when network policies are misconfigured.
 
 ---
 
@@ -1087,12 +1252,15 @@ kubectl run -it --rm debug --image=busybox --restart=Never -n student-api -- nsl
 ### Test Connectivity
 ```bash
 # From frontend pod to API
-kubectl exec -n student-api <frontend-pod> -- wget -qO- http://student-crud-api-api.student-api.svc.cluster.local:3000/api/v1/health
+# Install wget and curl if not available (Alpine-based images)
+kubectl exec -n student-api <frontend-pod> -- sh -c 'apk add --no-cache wget curl 2>/dev/null || true'
+
+kubectl exec -n student-api <frontend-pod> -- sh -c 'wget -qO- http://student-crud-api-api.student-api.svc.cluster.local:3000/api/v1/health 2>/dev/null || curl -s http://student-crud-api-api.student-api.svc.cluster.local:3000/api/v1/health'
 ```
 
 ### Access Services
 
-**Using kubectl port-forward** (recommended for simple service access):
+**Using kubectl port-forward** (recommended for service access):
 
 ```bash
 # Grafana
@@ -1108,23 +1276,9 @@ kubectl port-forward svc/student-crud-api-api 3000:3000 -n student-api
 kubectl port-forward svc/student-crud-api-frontend 8080:8080 -n student-api
 ```
 
-**Using minikube tunnel** (optional, for ingress services only):
-
-```bash
-# Start minikube tunnel in a separate terminal (runs in foreground)
-minikube tunnel
-
-# This will expose ingress services on localhost (port 80)
-# Access services using localhost with Host header (no /etc/hosts needed)
-INGRESS_HOST=$(kubectl get ingress -n student-api -o jsonpath='{.items[0].spec.rules[0].host}')
-curl -H "Host: $INGRESS_HOST" http://localhost/api/v1/health
-
-# Stop tunnel with Ctrl+C when done
-```
-
 **Note**: 
 - **Recommended**: Use `kubectl port-forward` for direct service access (Grafana, Prometheus, API, Frontend)
-- **Optional**: Use `minikube tunnel` only if you want to test ingress routing
+- **Alternative**: If you have a domain name configured, you can use Ingress by setting `ingress.enabled: true` in `charts/crud-api/values.yaml` and configuring `ingress.appHost` and `ingress.api` with your domain names
 - All access uses `localhost` - **no /etc/hosts modifications or root privileges needed**
 - For this demo, `kubectl port-forward` is sufficient for all testing
 
@@ -1138,35 +1292,22 @@ cd deliverables/scripts
 
 ---
 
-## Screenshots Guide
+## Monitoring Dashboards and Alerts
 
-### Required Screenshots
+### Grafana Dashboards
 
-1. **Grafana Dashboard**:
-   - Memory usage graphs (before/after)
-   - Pod restart count (should be 0 after fixes)
-   - CPU usage trends
-   - All pods in healthy state
+Review the following in Grafana:
+- Memory usage graphs (before/after)
+- Pod restart count (should be 0 after fixes)
+- CPU usage trends
+- All pods in healthy state
 
-2. **Prometheus Alerts**:
-   - Alert rules loaded
-   - Active alerts (if any)
-   - Alert history
+### Prometheus Alerts
 
-3. **Kubectl Outputs**:
-   - Pod status (before/after)
-   - Service endpoints
-   - Resource usage
-   - DNS resolution tests
-
-### Screenshot Locations
-
-Save screenshots in `assets/` directory:
-- `assets/pod_status_before.png` - Pods in CrashLoopBackOff
-- `assets/pod_status_after.png` - All pods Running
-- `assets/grafana_dashboard.png` - Grafana dashboard view
-- `assets/prometheus_alerts.png` - Prometheus alerts view
-- `assets/dns_resolution.png` - DNS resolution test output
+Review the following in Prometheus/Alertmanager:
+- Alert rules loaded
+- Active alerts (if any)
+- Alert history
 
 ---
 
@@ -1241,14 +1382,3 @@ The application is now healthy with:
 
 ---
 
-**Next Steps**:
-1. Review Grafana dashboards regularly
-2. Monitor Prometheus alerts
-3. Test failure scenarios periodically
-4. Adjust resource limits based on actual usage
-5. Enable network policies when ready for production
-
----
-
-**Report Generated**: 2024  
-**Status**: ✅ Complete - Ready for Evaluation

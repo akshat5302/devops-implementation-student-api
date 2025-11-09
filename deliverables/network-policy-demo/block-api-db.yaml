@@ -1,0 +1,54 @@
+---
+# Network Policy to Block API and DB Connection (for demonstration)
+# This policy blocks the API pod from connecting to the database
+# Apply this to demonstrate network policy blocking behavior
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: block-api-db-connection
+  namespace: student-api
+spec:
+  podSelector:
+    matchLabels:
+      app: student-crud-api-api
+  policyTypes:
+  - Egress
+  egress:
+  # Only allow DNS, but NOT database connection
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: UDP
+      port: 53
+  # Explicitly deny database connection (no rule for port 5432)
+  # This will cause API to fail when trying to connect to database
+
+---
+# Network Policy to Allow API and DB Connection (fix)
+# Apply this after demonstrating the blocking behavior
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-db-connection
+  namespace: student-api
+spec:
+  podSelector:
+    matchLabels:
+      app: student-crud-api-api
+  policyTypes:
+  - Egress
+  egress:
+  # Allow DNS
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: UDP
+      port: 53
+  # Allow database connection
+  - to:
+    - podSelector:
+        matchLabels:
+          app.name: student-api-student-crud-api-api-db
+    ports:
+    - protocol: TCP
+      port: 5432
