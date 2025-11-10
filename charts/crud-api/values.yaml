@@ -17,7 +17,7 @@ frontend:
     tag: latest
     pullPolicy: IfNotPresent
   replicaCount: 1
-  apiUrl: "" # If empty, will use http://student-crud-api-api:3000/api/v1 (Kubernetes service DNS)
+  apiUrl: "http://localhost:3000/api/v1" # If empty, will use http://student-crud-api-api:3000/api/v1 (Kubernetes service DNS)
   checkApiConnectivity: false # Enable API connectivity check at startup (for testing failures)
   failOnApiUnreachable: false # Exit container if API is unreachable (causes CrashLoopBackOff when enabled)
   apiCheckRetries: 3 # Number of retries before giving up

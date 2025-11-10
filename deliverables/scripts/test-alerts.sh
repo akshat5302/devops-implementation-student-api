@@ -5,7 +5,7 @@
 
 set -e
 
-API_URL="${API_URL:-http://student-api.atlan.com}"
+API_URL="${API_URL:-http://localhost:3000}"
 NAMESPACE="${NAMESPACE:-student-api}"
 SERVICE_NAME="${SERVICE_NAME:-student-crud-api-api}"
 
@@ -38,7 +38,7 @@ trigger_multiple() {
     local delay=${3:-0.1}
     
     echo "Triggering $count requests to $endpoint..."
-    for i in $(seq 1 $count); do
+    for _ in $(seq 1 $count); do
         call_api "$endpoint" > /dev/null 2>&1 &
         sleep $delay
     done

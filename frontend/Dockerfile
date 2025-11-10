@@ -7,7 +7,7 @@ WORKDIR /app
 COPY generate-config.js .
 
 # Generate config.js from environment variable (default if not set)
-ARG API_BASE_URL=http://student-api.atlan.com/api/v1
+ARG API_BASE_URL=http://localhost:3000/api/v1
 ENV REACT_APP_API_URL=${API_BASE_URL}
 
 RUN node generate-config.js

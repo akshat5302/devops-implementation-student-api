@@ -91,7 +91,7 @@ case "$ACTION" in
     
     # Restore apiUrl to default (empty will use ingress.api)
     if grep -q "apiUrl: \"http://wrong-backend-url" "$VALUES_FILE"; then
-      sed -i.bak 's|apiUrl: "http://wrong-backend-url.*|apiUrl: "" # If empty, will use http://student-api.atlan.com/api/v1|' "$VALUES_FILE"
+      sed -i.bak 's|apiUrl: "http://wrong-backend-url.*|apiUrl: "" # If empty, will use http://localhost:3000/api/v1|' "$VALUES_FILE"
     fi
     
     # Restore connectivity checks to default (disabled)

@@ -98,7 +98,24 @@ chmod +x setup-cluster.sh
 - Whether to recreate existing cluster (if one exists)
 - Whether to install Vault (optional - answer 'n' for this demo)
 - Whether to install External Secrets (optional - answer 'n' for this demo)
-- Whether to deploy with External Secrets (answer 'n' - will use Kubernetes secrets)
+
+**Important - Accessing the Application**:
+
+Since ingress is disabled, access the application via port-forward:
+
+```bash
+# Port-forward API service (in one terminal)
+kubectl port-forward -n student-api svc/student-crud-api-api 3000:3000
+
+# Port-forward Frontend service (in another terminal)  
+kubectl port-forward -n student-api svc/student-crud-api-frontend 8080:8080
+```
+
+Then:
+- Frontend: `http://localhost:8080`
+- API: `http://localhost:3000/api/v1`
+
+**Note**: Frontend ConfigMap must use `http://localhost:3000/api/v1` for browser access, as browsers cannot resolve Kubernetes internal DNS.
 
 **Expected Output** (excerpt):
 ```
@@ -316,13 +333,21 @@ kubectl get configmap -n student-api student-crud-api-frontend-config -o yaml
 - `FAIL_ON_API_UNREACHABLE: "true"` (causes exit)
 
 **Observe** (before running failure script - correct configuration):
-- `API_BASE_URL: "http://student-crud-api-api:3000/api/v1"` (uses Kubernetes service DNS)
+- `API_BASE_URL: "http://localhost:3000/api/v1"` (for browser-based access via port-forward)
+- OR `API_BASE_URL: "http://student-crud-api-api:3000/api/v1"` (for pod-to-pod communication)
 - `FAIL_ON_API_UNREACHABLE: "false"`
 
-**Note**: The frontend uses Kubernetes service DNS (`student-crud-api-api:3000`) instead of external domains.
+**Note**: 
+- For **browser-based access** (via port-forward): Frontend uses `http://localhost:3000/api/v1` because browsers cannot resolve Kubernetes internal DNS
+- For **pod-to-pod communication**: Frontend would use Kubernetes service DNS (`student-crud-api-api:3000` or full FQDN)
+- The ConfigMap is set based on how the frontend is accessed
 
 ### 4.5 Test DNS Resolution
 
+**Note**: This section tests DNS resolution from **within the cluster** (pod-to-pod). 
+For browser-based access, DNS resolution is not applicable as browsers use `localhost`.
+
+**For Pod-to-Pod Connectivity Testing**:
 ```bash
 # Test DNS from within cluster
 kubectl run -it --rm debug --image=busybox --restart=Never -n student-api -- nslookup student-crud-api-api
@@ -336,6 +361,13 @@ Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
 Name:      student-crud-api-api
 Address 1: 10.244.1.5 student-crud-api-api.student-api.svc.cluster.local
 ```
+
+**For Browser-Based Access Testing**:
+- Ensure both services are port-forwarded:
+  - API: `kubectl port-forward -n student-api svc/student-crud-api-api 3000:3000`
+  - Frontend: `kubectl port-forward -n student-api svc/student-crud-api-frontend 8080:8080`
+- Frontend ConfigMap should use: `http://localhost:3000/api/v1`
+- Browser cannot resolve Kubernetes DNS, so `localhost` must be used
 
 **Note**: The frontend is trying to reach `wrong-backend-url` which doesn't exist, so DNS will fail for that.
 
@@ -405,10 +437,17 @@ kubectl get configmap -n student-api student-crud-api-frontend-config -o yaml | 
 
 **Expected** (after fix):
 ```yaml
+# For browser-based access (port-forward):
+API_BASE_URL: http://localhost:3000/api/v1
+
+# OR for pod-to-pod communication:
 API_BASE_URL: http://student-crud-api-api:3000/api/v1
 ```
 
-**Note**: The frontend uses Kubernetes service DNS (`student-crud-api-api.student-api.svc.cluster.local:3000` or short form `student-crud-api-api:3000`) for internal communication.
+**Note**: 
+- For **browser access** (recommended for this demo): Use `http://localhost:3000/api/v1`
+  - Requires port-forwarding: `kubectl port-forward -n student-api svc/student-crud-api-api 3000:3000`
+- For **pod-to-pod communication**: Use Kubernetes service DNS (`student-crud-api-api:3000` or full FQDN)
 
 ### 5.3 Wait for Pod Recovery
 
@@ -513,8 +552,12 @@ kubectl exec -n student-api $API_POD -- sh -c 'wget -qO- http://localhost:3000/a
 
 **✅ Health endpoint should return healthy status**
 
-### 6.4 Test Frontend to Backend Connectivity
+### 6.4 Test Frontend to Backend Connectivity (Pod-to-Pod)
 
+**Note**: This section tests **pod-to-pod connectivity** from within the cluster.
+For **browser-based testing**, see Section 6.7 (Test via Browser).
+
+**For Pod-to-Pod Testing** (from within cluster):
 ```bash
 # Get frontend pod name
 FRONTEND_POD=$(kubectl get pods -n student-api -l app=student-crud-api-frontend -o jsonpath='{.items[0].metadata.name}')
@@ -578,6 +621,36 @@ kubectl exec -n student-api $API_POD -- sh -c 'curl -s -X POST http://localhost:
 # Get all students
 kubectl exec -n student-api $API_POD -- sh -c 'wget -qO- http://localhost:3000/api/v1/students 2>/dev/null || curl -s http://localhost:3000/api/v1/students'
 ```
+
+### 6.7 Test Frontend via Browser (Port-Forward)
+
+**For Browser-Based Access**:
+
+1. **Port-forward both services**:
+```bash
+# Terminal 1: Port-forward API
+kubectl port-forward -n student-api svc/student-crud-api-api 3000:3000
+
+# Terminal 2: Port-forward Frontend  
+kubectl port-forward -n student-api svc/student-crud-api-frontend 8080:8080
+```
+
+2. **Verify ConfigMap uses localhost**:
+```bash
+kubectl get configmap -n student-api student-crud-api-frontend-config -o jsonpath='{.data.API_BASE_URL}'
+# Should show: http://localhost:3000/api/v1
+```
+
+3. **Open browser**: Navigate to `http://localhost:8080`
+
+4. **Expected**: Frontend should load and be able to call API at `http://localhost:3000/api/v1`
+
+**✅ Browser-based frontend can successfully reach backend via localhost**
+
+**Note**: 
+- Browsers cannot resolve Kubernetes internal DNS (`.svc.cluster.local`)
+- Therefore, `localhost` must be used when accessing via port-forward
+- Both services must be port-forwarded for this to work
 
 ### 6.6 Test Resource Usage
 
@@ -680,6 +753,8 @@ kill $PORT_FORWARD_PID 2>/dev/null || true
 
 **Note**: 
 - Using `kubectl port-forward` (as shown above) is the recommended approach for this demo
+- **Frontend ConfigMap must use `http://localhost:3000/api/v1`** when accessing via browser (port-forward)
+- Browsers cannot resolve Kubernetes internal DNS (`.svc.cluster.local`), so `localhost` is required
 - If you have a domain name configured, you can use Ingress instead by:
   1. Setting `ingress.enabled: true` in `charts/crud-api/values.yaml`
   2. Configuring `ingress.appHost` and `ingress.api` with your domain names
@@ -1031,19 +1106,34 @@ kubectl top pods -n student-api
 - Network policies can block pod-to-pod communication if not configured correctly
 - Default deny-all policy blocks all traffic unless explicitly allowed
 
-**Demonstration - Block API and DB Connection**:
+**Quick Test Using Script**:
+```bash
+# Navigate to scripts directory
+cd deliverables/scripts
+
+# Run full test sequence (baseline -> block -> allow)
+./test-network-policy.sh test
+
+# Or use individual commands:
+./test-network-policy.sh block    # Block API-DB connection
+./test-network-policy.sh allow   # Allow API-DB connection
+./test-network-policy.sh status  # Check current status
+./test-network-policy.sh cleanup # Remove all demo policies
+```
+
+**Manual Demonstration - Block API and DB Connection**:
 
 1. **Verify current connectivity** (before network policy):
 ```bash
 # Get API pod name
 API_POD=$(kubectl get pods -n student-api -l app=student-crud-api-api -o jsonpath='{.items[0].metadata.name}')
 
-# Install wget and curl if not available
-kubectl exec -n student-api $API_POD -- sh -c 'apk add --no-cache wget curl 2>/dev/null || true'
+# Install curl if not available (using apt-get for Debian-based images)
+kubectl exec -n student-api $API_POD --container api -- sh -c 'apt-get update -qq && apt-get install -y -qq curl 2>&1 || apk add --no-cache curl 2>&1 || true'
 
 # Test API can reach database (should work)
-kubectl exec -n student-api $API_POD -- sh -c 'wget -qO- http://localhost:3000/api/v1/health 2>/dev/null || curl -s http://localhost:3000/api/v1/health'
-# ✅ Should return healthy status
+kubectl exec -n student-api $API_POD --container api -- sh -c 'curl -s --max-time 5 http://localhost:3000/api/v1/students'
+# ✅ Should return students list or empty array
 ```
 
 2. **Apply blocking network policy**:
@@ -1078,10 +1168,10 @@ EOF
 3. **Observe connection failure**:
 ```bash
 # Wait a moment for policy to take effect
-sleep 5
+sleep 10
 
-# Test API health endpoint (should fail or timeout)
-kubectl exec -n student-api $API_POD -- sh -c 'wget -qO- http://localhost:3000/api/v1/health 2>/dev/null || curl -s http://localhost:3000/api/v1/health'
+# Test API database endpoint (should fail or timeout)
+kubectl exec -n student-api $API_POD --container api -- sh -c 'curl -s --max-time 5 http://localhost:3000/api/v1/students'
 # ❌ Should fail or timeout (API cannot reach database)
 
 # Check pod logs for connection errors
@@ -1097,6 +1187,14 @@ kubectl describe networkpolicy -n student-api block-api-db-connection
 
 **Fix Applied**:
 - Remove the blocking network policy or apply the allowing policy:
+
+**Using Script** (recommended):
+```bash
+cd deliverables/scripts
+./test-network-policy.sh allow
+```
+
+**Manual Fix**:
 ```bash
 # Option 1: Delete the blocking policy
 kubectl delete networkpolicy -n student-api block-api-db-connection
@@ -1142,11 +1240,11 @@ EOF
 **Verification**:
 ```bash
 # Wait for policy to take effect
-sleep 5
+sleep 10
 
-# Test API health endpoint (should work now)
-kubectl exec -n student-api $API_POD -- sh -c 'wget -qO- http://localhost:3000/api/v1/health 2>/dev/null || curl -s http://localhost:3000/api/v1/health'
-# ✅ Should return healthy status
+# Test API database endpoint (should work now)
+kubectl exec -n student-api $API_POD --container api -- sh -c 'curl -s --max-time 5 http://localhost:3000/api/v1/students'
+# ✅ Should return students list or empty array
 
 # Check network policies
 kubectl get networkpolicies -n student-api
@@ -1178,7 +1276,9 @@ frontend:
 
 ```yaml
 frontend:
-  apiUrl: ""                    # ✅ Empty = use Kubernetes service DNS (student-crud-api-api:3000)
+  apiUrl: "http://localhost:3000/api/v1"  # ✅ For browser-based access via port-forward
+  # Note: When accessed via browser, use localhost
+  # When accessed from within cluster, use Kubernetes service DNS
   checkApiConnectivity: false   # ✅ Disabled
   failOnApiUnreachable: false  # ✅ Prevents CrashLoopBackOff
 ```
@@ -1207,10 +1307,19 @@ frontend:
    - Prometheus alert rules for all identified issues
 
 2. **`deliverables/grafana-dashboards/dashboard.json`**
-   - Grafana dashboard for monitoring
+   - Grafana dashboard for monitoring Student API metrics
 
-3. **`deliverables/scripts/test-frontend-failure.sh`**
+3. **`deliverables/scripts/test-network-policy.sh`**
+   - Automated network policy testing script
+   - Supports block/allow/test/status/cleanup commands
+   - Tests API-DB connectivity with network policies
+   - Usage: `./test-network-policy.sh [block|allow|test|status|cleanup]`
+
+4. **`deliverables/scripts/test-frontend-failure.sh`**
    - Script to reproduce and fix CrashLoopBackOff scenario
+
+5. **`deliverables/network-policy-demo/block-api-db.yaml`**
+   - Network policy demonstration files (blocking and allowing policies)
 
 ---
 

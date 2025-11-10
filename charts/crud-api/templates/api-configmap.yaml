@@ -12,7 +12,7 @@ data:
     {{- if .Values.postgres.remote_db_url }}
     DATABASE_URL: {{ .Values.postgres.remote_db_url | quote }}
     {{- else }}
-    DATABASE_URL: postgres://{{ .Values.postgres.pgUser }}:{{ .Values.postgres.pgPassword }}@{{ .Release.Name }}-api-db:5432/{{ .Values.postgres.pgDb }}
+    DATABASE_URL: postgres://{{ .Values.postgres.pgUser }}:{{ .Values.postgres.pgPassword }}@{{ .Release.Name }}-api-db.{{ .Release.Namespace }}.svc.cluster.local:5432/{{ .Values.postgres.pgDb }}
     {{- end }}
 ---
 {{- if and .Values.postgres.local_setup .Values.api.enabled (not .Values.externalSecret.enabled) }}
